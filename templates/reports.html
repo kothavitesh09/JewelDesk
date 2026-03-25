@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="reports-shell">
+    <div class="reports-grid">
+      <aside class="premium-card reports-sidebar">
+        <div class="section-heading section-heading--compact">
+          <h2 class="section-title reports-title">Reports</h2>
+        </div>
+
+        <div class="reports-filter-card">
+          <div class="mb-4">
+            <label class="form-label premium-label" for="fromDate">From Date</label>
+            <input type="date" id="fromDate" class="form-control premium-input reports-date-input" />
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label premium-label" for="toDate">To Date</label>
+            <input type="date" id="toDate" class="form-control premium-input reports-date-input" />
+          </div>
+
+          <div class="reports-sidebar-actions">
+            <button class="btn reports-btn-primary" id="filterBtn" type="button">Show Invoices</button>
+            <button class="btn reports-btn-secondary" id="downloadExcelBtn" type="button">Download Excel</button>
+          </div>
+
+          <div class="reports-meta" id="reportMeta"></div>
+        </div>
+      </aside>
+
+      <div class="premium-card reports-main-card">
+        <div class="reports-main-header">
+          <h2 class="section-title reports-title">Invoice List</h2>
+          <div class="reports-totals-pill" id="reportSummaryPill">
+            <span>Total Invoices: <strong id="summaryInvoiceCount">0</strong></span>
+            <span>Total Amount: <strong id="summaryInvoiceAmount">Rs 0</strong></span>
+          </div>
+        </div>
+
+        <div class="reports-groups" id="reportsGroups"></div>
+        <div class="reports-empty-state" id="emptyState">No invoices for selected dates.</div>
+      </div>
+    </div>
+  </section>
+
+  <script src="{{ url_for('static', filename='js/reports.js', v='20260324c') }}"></script>
+{% endblock %}
+
