@@ -14,7 +14,7 @@ from config import (
 
 
 DEFAULT_FALLBACK_URI = "mongodb://localhost:27017"
-CLIENT_TIMEOUT_MS = 5000
+CLIENT_TIMEOUT_MS = 30000
 
 _client: Optional[MongoClient] = None
 _db_error: Optional[str] = None
