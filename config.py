@@ -27,7 +27,7 @@ def _env(name: str, default: str) -> str:
 
 
 # MongoDB
-MONGODB_URI = _env("MONGODB_URI", "mongodb+srv://abhi:abhi123@vgj.gwuy6ao.mongodb.net/")
+MONGODB_URI = os.environ.get("MONGO_URI")
 MONGODB_DB = _env("MONGODB_DB", "gold_jewellers")
 MONGODB_BILLS_COLLECTION = _env("MONGODB_BILLS_COLLECTION", "bills")
 MONGODB_COUNTERS_COLLECTION = _env("MONGODB_COUNTERS_COLLECTION", "counters")
