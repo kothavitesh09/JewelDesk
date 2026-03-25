@@ -12,11 +12,6 @@ from excel_export import export_bills_to_excel_bytes
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
-from db import is_db_available, get_db_error
-
-print("DB CONNECTED:", is_db_available())
-print("DB ERROR:", get_db_error())
-
 
 @app.get("/")
 def root():
