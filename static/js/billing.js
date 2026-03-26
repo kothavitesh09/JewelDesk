@@ -131,23 +131,23 @@ function addItemRow(item = {}, options = {}) {
   const invoiceAmount = item.invoice_amount ?? item.amount ?? "";
 
   tr.innerHTML = `
-    <td class="text-center row-no align-middle">1</td>
-    <td class="align-middle">
+    <td class="text-center row-no align-middle" data-label="S. No">1</td>
+    <td class="align-middle" data-label="Particulars">
       <input type="text" class="form-control form-control-sm item-particulars" placeholder="Item name" value="${String(item.particulars || "").replace(/"/g, "&quot;")}" />
     </td>
-    <td class="align-middle">
+    <td class="align-middle" data-label="HSN Code">
       <input type="text" class="form-control form-control-sm item-hsn" placeholder="HSN" value="${String(item.hsn_code || "").replace(/"/g, "&quot;")}" />
     </td>
-    <td class="align-middle">
+    <td class="align-middle" data-label="Qty in Gms">
       <input type="number" min="0" step="0.001" class="form-control form-control-sm item-qty" placeholder="0.000" value="${item.qty_gms ?? ""}" />
     </td>
-    <td class="align-middle">
+    <td class="align-middle" data-label="Amount (Rs, Ps)">
       <input type="number" min="0" step="0.01" class="form-control form-control-sm item-amount-input" placeholder="0.00" value="${invoiceAmount === "" ? "" : Number(invoiceAmount)}" />
     </td>
-    <td class="align-middle">
+    <td class="align-middle" data-label="Rate per Gms">
       <span class="item-rate d-inline-block" style="min-width: 90px;">0.00</span>
     </td>
-    <td class="text-center align-middle">
+    <td class="text-center align-middle" data-label="Action">
       <button type="button" class="btn btn-sm btn-outline-danger removeItemBtn">X</button>
     </td>
   `;

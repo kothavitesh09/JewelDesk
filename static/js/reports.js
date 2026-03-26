@@ -182,11 +182,11 @@ function renderBills(bills) {
       .map(
         (bill) => `
           <tr>
-            <td>${bill.invoice_no_text || bill.invoice_no}</td>
-            <td>${formatDisplayDate(bill.date)}</td>
-            <td>${bill.customer_name || ""}</td>
-            <td class="reports-amount-cell">Rs ${money0(bill.final_amount)}</td>
-            <td>${actionButtonsHTML(bill.invoice_no)}</td>
+            <td data-label="Invoice No">${bill.invoice_no_text || bill.invoice_no}</td>
+            <td data-label="Date">${formatDisplayDate(bill.date)}</td>
+            <td data-label="Customer">${bill.customer_name || ""}</td>
+            <td class="reports-amount-cell" data-label="Invoice Total">Rs ${money0(bill.final_amount)}</td>
+            <td data-label="Actions">${actionButtonsHTML(bill.invoice_no)}</td>
           </tr>
         `,
       )
