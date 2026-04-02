@@ -1,47 +1,223 @@
 {% extends "base.html" %}
 {% block content %}
-  <section class="reports-shell">
-    <div class="reports-grid">
-      <aside class="premium-card reports-sidebar">
-        <div class="section-heading section-heading--compact">
-          <h2 class="section-title reports-title">Reports</h2>
-        </div>
-
-        <div class="reports-filter-card">
-          <div class="mb-4">
-            <label class="form-label premium-label" for="fromDate">From Date</label>
-            <input type="date" id="fromDate" class="form-control premium-input reports-date-input" />
-          </div>
-
-          <div class="mb-4">
-            <label class="form-label premium-label" for="toDate">To Date</label>
-            <input type="date" id="toDate" class="form-control premium-input reports-date-input" />
-          </div>
-
-          <div class="reports-sidebar-actions">
-            <button class="btn reports-btn-primary" id="filterBtn" type="button">Show Invoices</button>
-            <button class="btn reports-btn-secondary" id="downloadExcelBtn" type="button">Download Excel</button>
-          </div>
-
-          <div class="reports-meta" id="reportMeta"></div>
-        </div>
-      </aside>
-
-      <div class="premium-card reports-main-card">
-        <div class="reports-main-header">
-          <h2 class="section-title reports-title">Invoice List</h2>
-          <div class="reports-totals-pill" id="reportSummaryPill">
-            <span>Total Invoices: <strong id="summaryInvoiceCount">0</strong></span>
-            <span>Total Amount: <strong id="summaryInvoiceAmount">Rs 0</strong></span>
+  <section class="reports-shell dashboard-reference-shell">
+    <div class="dashboard-kpi-grid dashboard-kpi-grid--reference" id="dashboardKpis">
+      <article class="premium-card kpi-card kpi-card--sales skeleton-card">
+        <div class="kpi-card__inner">
+          <div class="kpi-card__icon-wrap kpi-card__icon-wrap--sales">&#8377;</div>
+          <div>
+            <div class="kpi-card__eyebrow">Today Sales</div>
+            <div class="kpi-card__value" id="salesAmountValue">Rs 0.00</div>
+            <div class="kpi-card__meta" id="salesTrendValue">Revenue from today's invoices</div>
           </div>
         </div>
+      </article>
+      <article class="premium-card kpi-card kpi-card--invoices skeleton-card">
+        <div class="kpi-card__inner">
+          <div class="kpi-card__icon-wrap kpi-card__icon-wrap--purchase">&#8593;</div>
+          <div>
+            <div class="kpi-card__eyebrow">Today Purchases</div>
+            <div class="kpi-card__value" id="purchaseAmountValue">Rs 0.00</div>
+            <div class="kpi-card__meta" id="purchaseTrendValue">Incoming stock value for today</div>
+          </div>
+        </div>
+      </article>
+      <article class="premium-card kpi-card kpi-card--gold skeleton-card">
+        <div class="kpi-card__inner">
+          <div class="kpi-card__icon-wrap kpi-card__icon-wrap--stock">&#9679;</div>
+          <div>
+            <div class="kpi-card__eyebrow">Total Stock</div>
+            <div class="kpi-card__value"><span id="stockWeightValue">0.000</span> g</div>
+            <div class="kpi-card__meta" id="stockMetaValue">Available metal weight on hand</div>
+          </div>
+        </div>
+      </article>
+      <article class="premium-card kpi-card kpi-card--alert skeleton-card">
+        <div class="kpi-card__inner">
+          <div class="kpi-card__icon-wrap kpi-card__icon-wrap--alert">!</div>
+          <div>
+            <div class="kpi-card__eyebrow">Low Stock Alerts</div>
+            <div class="kpi-card__value" id="alertCountValue">0</div>
+            <div class="kpi-card__meta" id="alertSummaryValue">Items below the stock threshold</div>
+          </div>
+        </div>
+      </article>
+    </div>
 
-        <div class="reports-groups" id="reportsGroups"></div>
-        <div class="reports-empty-state" id="emptyState">No invoices for selected dates.</div>
+    <div class="premium-card dashboard-hero-card">
+      <div class="dashboard-shop-header">
+        <div class="dashboard-shop-name-wrap">
+          <div class="dashboard-shop-name" id="shopNameText">Vijaya Grandhi Jewellers</div>
+        </div>
+        <div class="dashboard-header-controls">
+          <label class="dashboard-filter-inline__label" for="monthSelector">Month</label>
+          <input type="month" id="monthSelector" class="form-control premium-input reports-date-input" />
+          <input type="date" id="fromDate" class="form-control premium-input reports-date-input dashboard-hidden-date" />
+          <input type="date" id="toDate" class="form-control premium-input reports-date-input dashboard-hidden-date" />
+        </div>
+      </div>
+      <div class="dashboard-summary-layout">
+        <div class="dashboard-summary-table-card">
+          <h2 class="dashboard-card-heading">Abstract Sheet</h2>
+          <div class="reports-loading" id="reportsLoading">
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line"></div>
+          </div>
+          <div class="table-responsive premium-table-wrap">
+            <table class="table reports-table dashboard-table" id="abstractTable">
+              <thead>
+                <tr>
+                  <th>Particulars</th>
+                  <th class="text-end">Qty</th>
+                  <th class="text-end">Taxable</th>
+                  <th class="text-end">CGST</th>
+                  <th class="text-end">SGST</th>
+                  <th class="text-end">IGST</th>
+                  <th class="text-end">Total</th>
+                </tr>
+              </thead>
+              <tbody id="abstractTableBody"></tbody>
+            </table>
+          </div>
+          <div class="reports-empty-state" id="emptyState">No invoices for selected dates.</div>
+        </div>
+
+        <div class="dashboard-summary-side">
+          <div class="dashboard-turnover-row">
+            <span id="turnoverPeriodText">Total Turnover: Mar-26</span>
+          </div>
+          <div class="dashboard-payment-card">
+            <div class="dashboard-card-heading-row">
+              <h2 class="dashboard-card-heading">Payment Summary</h2>
+              <span class="dashboard-card-subtle">Bank vs Cash</span>
+            </div>
+            <div class="payment-summary-grid payment-summary-grid--stacked">
+              <div class="payment-summary-grid__row">
+                <span>Bank</span>
+                <strong id="bankAmountValue">0.00</strong>
+              </div>
+              <div class="payment-summary-grid__row">
+                <span>Cash</span>
+                <strong id="cashAmountValue">0.00</strong>
+              </div>
+              <div class="payment-summary-grid__row payment-summary-grid__row--total">
+                <span>Total</span>
+                <strong id="paymentTotalValue">0.00</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dashboard-secondary-grid">
+      <div class="premium-card dashboard-panel-card">
+        <div class="dashboard-card-title-row">
+          <div>
+            <h2 class="dashboard-card-heading">Sales Trend</h2>
+            <p class="dashboard-card-note">Daily invoice totals for the selected range</p>
+          </div>
+          <div class="segmented-control" id="trendRangeToggle">
+            <button class="segmented-control__btn is-active" type="button" data-range="7">Last 7 Days</button>
+            <button class="segmented-control__btn" type="button" data-range="30">Last 30 Days</button>
+          </div>
+        </div>
+        <div class="trend-chart-shell" id="trendChartShell">
+          <svg id="trendChart" viewBox="0 0 640 240" preserveAspectRatio="none" aria-label="Sales trend chart">
+            <defs>
+              <linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#d4af37" stop-opacity="0.38"></stop>
+                <stop offset="100%" stop-color="#d4af37" stop-opacity="0.02"></stop>
+              </linearGradient>
+            </defs>
+            <path id="trendArea" fill="url(#trendFill)"></path>
+            <path id="trendLine" fill="none" stroke="#d4af37" stroke-width="3" stroke-linecap="round"></path>
+          </svg>
+          <div class="trend-chart__empty" id="trendChartEmpty">No trend data available for this range.</div>
+          <div class="trend-tooltip" id="trendTooltip"></div>
+          <div class="trend-points" id="trendPoints"></div>
+        </div>
+      </div>
+
+      <div class="dashboard-side-column">
+        <div class="premium-card dashboard-panel-card">
+          <div class="dashboard-card-title-row">
+            <div>
+              <h2 class="dashboard-card-heading">Quick Actions</h2>
+              <p class="dashboard-card-note">Shortcuts for daily billing work</p>
+            </div>
+          </div>
+          <div class="quick-actions quick-actions--inline">
+            <a href="/billing" class="btn btn-premium-primary quick-actions__primary">Create Invoice</a>
+            <a href="/purchases" class="btn btn-premium-secondary">Add Purchase</a>
+          </div>
+          <div class="top-items-list top-items-list--reference" id="topItemsList"></div>
+          <div class="reports-empty-state reports-empty-state--inline" id="topItemsEmpty">No top selling items yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dashboard-bottom-grid">
+      <div class="premium-card dashboard-panel-card">
+        <div class="dashboard-card-title-row">
+          <div>
+            <h2 class="dashboard-card-heading">Inventory Snapshot</h2>
+            <p class="dashboard-card-note">Combined stock view with status at a glance</p>
+          </div>
+        </div>
+        <div class="inventory-filters" id="inventoryPills"></div>
+        <div class="table-responsive premium-table-wrap">
+          <table class="table reports-table dashboard-table">
+            <thead>
+              <tr>
+                <th>Item Name</th>
+                <th class="text-end">Available Weight</th>
+                <th class="text-end">Status</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryTableBody"></tbody>
+          </table>
+        </div>
+        <div class="reports-empty-state reports-empty-state--inline" id="inventoryEmptyState">Inventory data is not configured yet.</div>
+      </div>
+
+      <div class="premium-card dashboard-panel-card">
+        <div class="dashboard-card-title-row">
+          <div>
+            <h2 class="dashboard-card-heading">Recent Transactions</h2>
+            <p class="dashboard-card-note">Latest business activity across sales and purchases</p>
+          </div>
+        </div>
+        <div class="recent-transactions recent-transactions--split">
+          <div class="recent-transactions__column">
+            <div class="recent-transactions__head">
+              <span>Latest Sales</span>
+              <a href="/billing" class="view-all-link">View All</a>
+            </div>
+            <div id="recentSalesList"></div>
+          </div>
+          <div class="recent-transactions__column">
+            <div class="recent-transactions__head">
+              <span>Latest Purchases</span>
+              <a href="/purchases" class="view-all-link">View All</a>
+            </div>
+            <div id="recentPurchasesList"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="premium-card dashboard-panel-card">
+        <div class="dashboard-card-title-row">
+          <div>
+            <h2 class="dashboard-card-heading">Low Stock Alerts</h2>
+            <p class="dashboard-card-note">Critical items are highlighted first for quick action</p>
+          </div>
+        </div>
+        <div class="alert-cards" id="lowStockAlerts"></div>
+        <div class="reports-empty-state reports-empty-state--inline" id="lowStockEmptyState">No low stock alerts in the current dataset.</div>
       </div>
     </div>
   </section>
 
-  <script src="{{ url_for('static', filename='js/reports.js', v='20260326a') }}"></script>
+  <script src="{{ url_for('static', filename='js/reports.js', v='20260402a') }}"></script>
 {% endblock %}
-

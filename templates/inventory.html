@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="reports-shell inventory-shell">
+    <div class="inventory-layout">
+      <div class="premium-card inventory-master-card">
+        <div class="dashboard-card-title-row">
+          <div>
+            <h1 class="dashboard-card-heading">Master Items</h1>
+          </div>
+        </div>
+
+        <div class="inventory-tabs" id="inventoryTypeTabs">
+          <button type="button" class="inventory-tab is-active" data-type="Gold">Gold</button>
+          <button type="button" class="inventory-tab" data-type="Gold Pure">Gold Pure</button>
+          <button type="button" class="inventory-tab" data-type="Silver">Silver</button>
+          <button type="button" class="inventory-tab" data-type="Silver Pure">Silver Pure</button>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label premium-label" for="inventoryItemName">Item Name</label>
+          <input type="text" id="inventoryItemName" class="form-control premium-input" placeholder="Add a new item" />
+        </div>
+
+        <button type="button" class="btn btn-premium-primary inventory-add-btn" id="addInventoryItemBtn">Add Item</button>
+
+        <div class="inventory-note">
+          <strong>Inventory types</strong>
+          <span>Items you create here are reused directly in Billing and Purchases for the selected type.</span>
+        </div>
+
+        <div class="inventory-list-wrap">
+          <div class="inventory-list-head">
+            <span id="inventoryListTitle">Gold Items</span>
+            <span class="inventory-count-pill" id="inventoryListCount">0 Items</span>
+          </div>
+          <div class="inventory-master-list" id="inventoryMasterList"></div>
+        </div>
+      </div>
+
+      <div class="premium-card inventory-stock-card">
+        <div class="dashboard-card-title-row">
+          <div>
+            <h2 class="dashboard-card-heading">Stock Snapshot</h2>
+          </div>
+          <input type="search" id="inventorySearch" class="form-control premium-input inventory-search" placeholder="Search items" />
+        </div>
+
+        <div class="table-responsive premium-table-wrap">
+          <table class="table reports-table dashboard-table">
+            <thead>
+              <tr>
+                <th>Item Name</th>
+                <th>Type</th>
+                <th class="text-end">Total Weight (grams)</th>
+                <th>Last Updated</th>
+              </tr>
+            </thead>
+            <tbody id="inventorySnapshotBody"></tbody>
+          </table>
+        </div>
+        <div class="reports-empty-state reports-empty-state--inline" id="inventorySnapshotEmptyState">No inventory items yet.</div>
+      </div>
+    </div>
+  </section>
+
+  <script src="{{ url_for('static', filename='js/inventory.js', v='20260402b') }}"></script>
+{% endblock %}

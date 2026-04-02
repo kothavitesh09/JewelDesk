@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="reports-shell purchases-shell">
+    <div class="purchases-layout">
+      <div class="premium-card purchases-form-card">
+        <div class="dashboard-card-title-row">
+          <div>
+            <h1 class="dashboard-card-heading">Add Purchase</h1>
+          </div>
+        </div>
+
+        <form id="purchaseForm" class="purchase-form">
+          <div class="mb-3">
+            <label class="form-label premium-label" for="supplierName">Supplier Name *</label>
+            <input type="text" id="supplierName" class="form-control premium-input" />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label premium-label" for="purchaseDate">Date</label>
+            <input type="date" id="purchaseDate" class="form-control premium-input" />
+          </div>
+
+          <div class="purchase-items-grid" id="purchaseItemsGrid"></div>
+
+          <div class="purchase-form__carousel">
+            <button class="purchase-nav-button" id="purchasePrevBtn" type="button" aria-label="Previous row">&#9664;</button>
+            <div class="purchase-form__hint" id="purchaseTotalText">Total Amount: Rs 0.00</div>
+            <button class="purchase-nav-button" id="purchaseNextBtn" type="button" aria-label="Next row">&#9654;</button>
+          </div>
+
+          <div class="purchase-form__actions">
+            <button type="button" class="btn btn-premium-secondary" id="addPurchaseRowBtn">Add Item Row</button>
+            <button type="submit" class="btn btn-premium-primary" id="savePurchaseBtn">Save Purchase</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="premium-card purchases-table-card">
+        <div class="dashboard-card-title-row">
+          <div>
+            <h2 class="dashboard-card-heading">Previous Purchases</h2>
+          </div>
+        </div>
+        <div class="table-responsive premium-table-wrap">
+          <table class="table reports-table dashboard-table">
+            <thead>
+              <tr>
+                <th>Supplier</th>
+                <th>Date</th>
+                <th class="text-end">Total Amount</th>
+                <th class="text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="purchasesTableBody"></tbody>
+          </table>
+        </div>
+        <div class="reports-empty-state reports-empty-state--inline" id="purchasesEmptyState">No purchases yet.</div>
+      </div>
+    </div>
+  </section>
+
+  <script src="{{ url_for('static', filename='js/purchases.js', v='20260402a') }}"></script>
+{% endblock %}

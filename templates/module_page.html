@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="reports-shell">
+    <div class="page-hero">
+      <div>
+        <span class="page-eyebrow">Workspace</span>
+        <h1 class="page-title">{{ module_title }}</h1>
+        <p class="page-copy">{{ module_copy }}</p>
+      </div>
+    </div>
+
+    <div class="premium-card module-placeholder-card">
+      <h2 class="section-title">{{ module_title }} Module</h2>
+      <p class="section-subtitle">This navigation tab is now live in the shell and ready for the next build-out pass.</p>
+      <div class="module-placeholder-actions">
+        <a href="/reports" class="btn btn-premium-secondary">Go to Dashboard</a>
+        <a href="/billing" class="btn btn-premium-primary">Open Billing</a>
+      </div>
+    </div>
+  </section>
+{% endblock %}

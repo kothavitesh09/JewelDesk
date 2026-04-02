@@ -97,9 +97,11 @@ def _build_row(
     }
 
 
-def export_bills_to_excel_bytes(from_date: Optional[str], to_date: Optional[str]) -> bytes:
+def export_bills_to_excel_bytes(from_date: Optional[str], to_date: Optional[str], user_id: Optional[str] = None) -> bytes:
     require_db()
     query = _date_range_filter(from_date, to_date)
+    if user_id:
+        query["user_id"] = user_id
     bills: List[Dict[str, Any]] = list(
         bills_collection.find(
             query,

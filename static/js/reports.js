@@ -1,285 +1,358 @@
-function money0(n) {
-  const x = Number(n);
-  if (!isFinite(x)) return "0";
-  return x.toLocaleString("en-IN", { maximumFractionDigits: 0 });
+const DASHBOARD_ENDPOINT = "/dashboard-data";
+
+const byId = (id) => document.getElementById(id);
+const currency = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const numberFormat = new Intl.NumberFormat("en-IN", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 3,
+});
+
+const dateLabel = new Intl.DateTimeFormat("en-IN", {
+  month: "short",
+  day: "numeric",
+});
+
+function formatCurrency(value) {
+  return currency.format(Number(value || 0));
 }
 
-function byId(id) {
-  return document.getElementById(id);
+function formatWeight(value) {
+  return numberFormat.format(Number(value || 0));
 }
 
-function toISODateString(d) {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
-function formatDisplayDate(value) {
-  if (!value) return "-";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return String(value).slice(0, 10);
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = String(d.getFullYear()).slice(-2);
-  return `${day}-${month}-${year}`;
-}
-
-function getMonthKey(value) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "Unknown";
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function getMonthLabel(value) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "Unknown";
-  return d.toLocaleString("en-US", { month: "long", year: "numeric" });
-}
-
-function groupBillsByMonth(bills) {
-  const groups = new Map();
-
-  bills.forEach((bill) => {
-    const key = getMonthKey(bill.date);
-    if (!groups.has(key)) {
-      groups.set(key, {
-        key,
-        label: getMonthLabel(bill.date),
-        total: 0,
-        bills: [],
-      });
+function buildQuery(params) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "") {
+      search.set(key, value);
     }
-
-    const group = groups.get(key);
-    group.bills.push(bill);
-    group.total += Number(bill.final_amount || 0);
   });
-
-  return Array.from(groups.values())
-    .sort((a, b) => b.key.localeCompare(a.key))
-    .map((group) => ({
-      ...group,
-      bills: group.bills.sort((a, b) => {
-        const dateCompare = String(b.date || "").localeCompare(String(a.date || ""));
-        if (dateCompare !== 0) return dateCompare;
-        return Number(b.invoice_no || 0) - Number(a.invoice_no || 0);
-      }),
-    }));
+  const queryString = search.toString();
+  return queryString ? `?${queryString}` : "";
 }
 
-async function fetchBills(from, to) {
-  const params = new URLSearchParams();
-  if (from) params.append("from", from);
-  if (to) params.append("to", to);
-  const url = `/bills?${params.toString()}`;
-  const res = await fetch(url);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data && data.error ? data.error : "Failed to load bills.");
-  }
-  return data.bills || [];
-}
-
-async function deleteBill(invoiceNo) {
-  const res = await fetch(`/bills/${encodeURIComponent(invoiceNo)}`, {
-    method: "DELETE",
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    headers: { Accept: "application/json" },
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data && data.error ? data.error : "Failed to delete invoice.");
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || "Unable to load sales data.");
   }
-  return data;
+  return response.json();
 }
 
-function setEmptyState(isEmpty) {
+function setText(id, value) {
+  const element = byId(id);
+  if (element) {
+    element.textContent = value;
+  }
+}
+
+function setTrendMeta(id, current, previous, label) {
+  const currentValue = Number(current || 0);
+  const previousValue = Number(previous || 0);
+  let copy = `${label} is steady compared to yesterday`;
+  if (currentValue > previousValue) {
+    copy = `${label} is up ${formatCurrency(currentValue - previousValue)} from yesterday`;
+  } else if (currentValue < previousValue) {
+    copy = `${label} is down ${formatCurrency(previousValue - currentValue)} from yesterday`;
+  }
+  setText(id, copy);
+}
+
+function renderAbstractTable(rows) {
+  const body = byId("abstractTableBody");
   const emptyState = byId("emptyState");
-  if (!emptyState) return;
-  emptyState.style.display = isEmpty ? "block" : "none";
-}
+  if (!body || !emptyState) return;
 
-function updateSummary(bills) {
-  const totalAmount = bills.reduce((sum, bill) => sum + Number(bill.final_amount || 0), 0);
-  const summaryInvoiceCount = byId("summaryInvoiceCount");
-  const summaryInvoiceAmount = byId("summaryInvoiceAmount");
-  const reportMeta = byId("reportMeta");
-
-  if (summaryInvoiceCount) summaryInvoiceCount.textContent = String(bills.length);
-  if (summaryInvoiceAmount) summaryInvoiceAmount.textContent = `Rs ${money0(totalAmount)}`;
-  if (reportMeta) reportMeta.textContent = bills.length ? `${bills.length} invoices found.` : "No invoices found.";
-}
-
-function actionButtonsHTML(invoiceNo) {
-  return `
-    <div class="reports-action-group">
-      <button class="btn reports-action-btn reports-action-btn--edit editBillBtn" data-invoice-no="${invoiceNo}">Edit</button>
-      <button class="btn reports-action-btn reports-action-btn--print printPdfBtn" data-invoice-no="${invoiceNo}">Print</button>
-      <button class="btn reports-action-btn reports-action-btn--delete deleteBillBtn" data-invoice-no="${invoiceNo}" aria-label="Delete invoice ${invoiceNo}">&#128465;</button>
-    </div>
-  `;
-}
-
-function bindActionButtons() {
-  document.querySelectorAll(".editBillBtn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const invoiceNo = btn.getAttribute("data-invoice-no");
-      window.location.href = `/billing?invoice_no=${encodeURIComponent(invoiceNo)}&mode=edit`;
-    });
-  });
-
-  document.querySelectorAll(".deleteBillBtn").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const invoiceNo = Number(btn.getAttribute("data-invoice-no"));
-      const ok = confirm(`Delete invoice ${invoiceNo}? This cannot be undone.`);
-      if (!ok) return;
-
-      try {
-        await deleteBill(invoiceNo);
-        await onFilter();
-      } catch (e) {
-        alert(e.message || "Failed to delete invoice.");
-      }
-    });
-  });
-
-  document.querySelectorAll(".printPdfBtn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const invoiceNo = btn.getAttribute("data-invoice-no");
-      const printUrl = `/generate-pdf?invoice_no=${encodeURIComponent(invoiceNo)}&download=0`;
-      const w = window.open(printUrl, "_blank");
-      if (!w) {
-        alert("Popup blocked. Please allow popups for printing.");
-        return;
-      }
-      try {
-        w.focus();
-      } catch (e) {}
-    });
-  });
-}
-
-function renderBills(bills) {
-  const groupsContainer = byId("reportsGroups");
-  if (!groupsContainer) {
-    console.error("Reports groups container not found: #reportsGroups");
+  body.innerHTML = "";
+  if (!rows || !rows.length) {
+    emptyState.style.display = "block";
     return;
   }
 
-  groupsContainer.innerHTML = "";
-  updateSummary(bills);
-  setEmptyState(!bills.length);
-
-  if (!bills.length) {
-    return;
-  }
-
-  const groups = groupBillsByMonth(bills);
-  groups.forEach((group) => {
-    const section = document.createElement("section");
-    section.className = "reports-month-card";
-
-    const rows = group.bills
-      .map(
-        (bill) => `
-          <tr>
-            <td data-label="Invoice No">${bill.invoice_no_text || bill.invoice_no}</td>
-            <td data-label="Date">${formatDisplayDate(bill.date)}</td>
-            <td data-label="Customer">${bill.customer_name || ""}</td>
-            <td class="reports-amount-cell" data-label="Invoice Total">Rs ${money0(bill.final_amount)}</td>
-            <td data-label="Actions">${actionButtonsHTML(bill.invoice_no)}</td>
-          </tr>
-        `,
-      )
-      .join("");
-
-    section.innerHTML = `
-      <div class="reports-month-header">${group.label}</div>
-      <div class="table-responsive reports-table-wrap">
-        <table class="table reports-table">
-          <thead>
-            <tr>
-              <th style="width: 180px;">Invoice No</th>
-              <th style="width: 180px;">Date</th>
-              <th>Customer</th>
-              <th style="width: 180px; text-align: right;">Invoice Total</th>
-              <th style="width: 230px; text-align: center;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-      <div class="reports-month-total">${group.label}: Rs ${money0(group.total)}</div>
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(row.label)}</td>
+      <td class="text-end">${formatWeight(row.qty)}</td>
+      <td class="text-end">${formatCurrency(row.taxable)}</td>
+      <td class="text-end">${formatCurrency(row.cgst)}</td>
+      <td class="text-end">${formatCurrency(row.sgst)}</td>
+      <td class="text-end">${formatCurrency(row.igst)}</td>
+      <td class="text-end">${formatCurrency(row.total)}</td>
     `;
-
-    groupsContainer.appendChild(section);
+    body.appendChild(tr);
   });
-
-  const grandTotal = bills.reduce((sum, bill) => sum + Number(bill.final_amount || 0), 0);
-  const footer = document.createElement("div");
-  footer.className = "reports-grand-total";
-  footer.textContent = `Grand Total: Rs ${money0(grandTotal)}`;
-  groupsContainer.appendChild(footer);
-
-  bindActionButtons();
+  emptyState.style.display = "none";
 }
 
-async function onFilter() {
+function renderTopItems(items) {
+  const list = byId("topItemsList");
+  const empty = byId("topItemsEmpty");
+  if (!list || !empty) return;
+
+  if (!items || !items.length) {
+    list.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+
+  list.innerHTML = items
+    .map(
+      (item) => `
+        <div class="top-items-list__item">
+          <div>
+            <strong>${escapeHtml(item.name)}</strong>
+            <div>${formatWeight(item.qty)} g sold</div>
+          </div>
+          <div>${formatCurrency(item.revenue)}</div>
+        </div>
+      `
+    )
+    .join("");
+  empty.style.display = "none";
+}
+
+function renderInventory(items) {
+  const body = byId("inventoryTableBody");
+  const empty = byId("inventoryEmptyState");
+  if (!body || !empty) return;
+
+  if (!items || !items.length) {
+    body.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+
+  body.innerHTML = items
+    .map(
+      (item) => `
+        <tr>
+          <td>${escapeHtml(item.item_name)}</td>
+          <td class="text-end">${formatWeight(item.available_weight)} g</td>
+          <td class="text-end">${escapeHtml(item.status)}</td>
+        </tr>
+      `
+    )
+    .join("");
+  empty.style.display = "none";
+}
+
+function renderRecentList(targetId, items, emptyLabel) {
+  const container = byId(targetId);
+  if (!container) return;
+
+  container.innerHTML = items && items.length
+    ? items
+        .map(
+          (item) => `
+            <div class="recent-transaction-card">
+              <div>
+                <strong>${escapeHtml(item.name)}</strong>
+                <div>${escapeHtml(item.id)}</div>
+              </div>
+              <div>${formatCurrency(item.amount)}</div>
+            </div>
+          `
+        )
+        .join("")
+    : `<div class="reports-empty-state reports-empty-state--inline" style="display:block;">${emptyLabel}</div>`;
+}
+
+function renderLowStockAlerts(items) {
+  const container = byId("lowStockAlerts");
+  const empty = byId("lowStockEmptyState");
+  if (!container || !empty) return;
+
+  if (!items || !items.length) {
+    container.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+
+  container.innerHTML = items
+    .map(
+      (item) => `
+        <article class="alert-card">
+          <strong>${escapeHtml(item.item_name)}</strong>
+          <div>${formatWeight(item.available_weight)} g available</div>
+          <span>${escapeHtml(item.status)}</span>
+        </article>
+      `
+    )
+    .join("");
+  empty.style.display = "none";
+}
+
+function renderTrendChart(points) {
+  const svg = byId("trendChart");
+  const line = byId("trendLine");
+  const area = byId("trendArea");
+  const shell = byId("trendChartShell");
+  const empty = byId("trendChartEmpty");
+  const pointsLayer = byId("trendPoints");
+  const tooltip = byId("trendTooltip");
+  if (!svg || !line || !area || !shell || !empty || !pointsLayer || !tooltip) return;
+
+  if (!points || !points.length) {
+    line.setAttribute("d", "");
+    area.setAttribute("d", "");
+    pointsLayer.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+
+  const width = 640;
+  const height = 240;
+  const paddingX = 28;
+  const paddingY = 20;
+  const maxAmount = Math.max(...points.map((point) => Number(point.amount || 0)), 1);
+  const stepX = points.length === 1 ? 0 : (width - paddingX * 2) / (points.length - 1);
+
+  const coordinates = points.map((point, index) => {
+    const amount = Number(point.amount || 0);
+    const x = paddingX + index * stepX;
+    const y = height - paddingY - (amount / maxAmount) * (height - paddingY * 2);
+    return { x, y, amount, date: point.date };
+  });
+
+  const linePath = coordinates
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(" ");
+  const areaPath = `${linePath} L ${coordinates[coordinates.length - 1].x.toFixed(2)} ${(height - paddingY).toFixed(2)} L ${coordinates[0].x.toFixed(2)} ${(height - paddingY).toFixed(2)} Z`;
+
+  line.setAttribute("d", linePath);
+  area.setAttribute("d", areaPath);
+  empty.style.display = "none";
+
+  pointsLayer.innerHTML = coordinates
+    .map(
+      (point) => `
+        <button
+          type="button"
+          class="trend-point"
+          style="left:${(point.x / width) * 100}%; top:${(point.y / height) * 100}%;"
+          data-date="${escapeHtml(point.date)}"
+          data-amount="${escapeHtml(formatCurrency(point.amount))}"
+          aria-label="${escapeHtml(point.date)} ${escapeHtml(formatCurrency(point.amount))}"
+        ></button>
+      `
+    )
+    .join("");
+
+  const showTooltip = (event) => {
+    const target = event.currentTarget;
+    tooltip.textContent = `${target.dataset.date}: ${target.dataset.amount}`;
+    tooltip.style.opacity = "1";
+    tooltip.style.left = target.style.left;
+    tooltip.style.top = target.style.top;
+  };
+
+  const hideTooltip = () => {
+    tooltip.style.opacity = "0";
+  };
+
+  pointsLayer.querySelectorAll(".trend-point").forEach((point) => {
+    point.addEventListener("mouseenter", showTooltip);
+    point.addEventListener("focus", showTooltip);
+    point.addEventListener("mouseleave", hideTooltip);
+    point.addEventListener("blur", hideTooltip);
+  });
+}
+
+function syncPeriodLabel(fromDate) {
+  const label = byId("turnoverPeriodText");
+  if (!label || !fromDate) return;
+
+  const date = new Date(`${fromDate}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return;
+  const month = date.toLocaleString("en-IN", { month: "short" });
+  const year = String(date.getFullYear()).slice(-2);
+  label.textContent = `Total Turnover: ${month}-${year}`;
+}
+
+async function loadSalesDashboard() {
+  const monthInput = byId("monthSelector");
   const fromDate = byId("fromDate");
   const toDate = byId("toDate");
-  if (!fromDate || !toDate) return;
+  const loader = byId("reportsLoading");
+
+  if (!monthInput || !fromDate || !toDate) return;
+
+  const monthValue = monthInput.value;
+  if (!monthValue) return;
+  const [year, month] = monthValue.split("-");
+  const startDate = `${year}-${month}-01`;
+  const endDate = new Date(Number(year), Number(month), 0);
+  const endValue = `${year}-${month}-${String(endDate.getDate()).padStart(2, "0")}`;
+
+  fromDate.value = startDate;
+  toDate.value = endValue;
+  syncPeriodLabel(startDate);
+
+  if (loader) loader.classList.add("is-visible");
 
   try {
-    const bills = await fetchBills(fromDate.value, toDate.value);
-    renderBills(bills);
-  } catch (e) {
-    alert(e.message || "Error loading reports.");
+    const data = await fetchJson(`${DASHBOARD_ENDPOINT}${buildQuery({ from: startDate, to: endValue })}`);
+    setText("shopNameText", data.branding?.shop_name || window.__JEWELDESK_USER_BRANDING__?.shop_name || "JewelDesk");
+
+    setText("salesAmountValue", formatCurrency(data.kpis?.today_sales));
+    setText("purchaseAmountValue", formatCurrency(data.kpis?.today_purchases));
+    setText("stockWeightValue", formatWeight(data.kpis?.total_stock_weight));
+    setText("alertCountValue", String(data.kpis?.low_stock_alerts || 0));
+
+    setTrendMeta("salesTrendValue", data.kpis?.today_sales, data.kpis?.today_sales_previous, "Sales");
+    setTrendMeta("purchaseTrendValue", data.kpis?.today_purchases, data.kpis?.today_purchases_previous, "Purchases");
+    setText("stockMetaValue", "Available metal weight on hand");
+    setText("alertSummaryValue", `${data.kpis?.low_stock_alerts || 0} items below the stock threshold`);
+
+    renderAbstractTable(data.monthly_summary || []);
+    setText("bankAmountValue", formatCurrency(data.payment_summary?.bank));
+    setText("cashAmountValue", formatCurrency(data.payment_summary?.cash));
+    setText("paymentTotalValue", formatCurrency(data.payment_summary?.total));
+    renderTopItems(data.top_selling_items || []);
+    renderInventory(data.inventory_snapshot || []);
+    renderRecentList("recentSalesList", data.recent_sales || [], "No sales yet.");
+    renderRecentList("recentPurchasesList", data.recent_purchases || [], "No purchases yet.");
+    renderLowStockAlerts(data.low_stock_alerts || []);
+    renderTrendChart(data.sales_trend || []);
+  } catch (error) {
+    window.JewelDeskUI?.toast?.(error.message || "Unable to load sales data.", "error");
+  } finally {
+    if (loader) loader.classList.remove("is-visible");
   }
 }
 
-async function downloadExcel() {
-  const fromDate = byId("fromDate");
-  const toDate = byId("toDate");
-  if (!fromDate || !toDate) return;
+function initializeMonthSelector() {
+  const monthInput = byId("monthSelector");
+  if (!monthInput) return;
 
-  const params = new URLSearchParams();
-  if (fromDate.value) params.append("from", fromDate.value);
-  if (toDate.value) params.append("to", toDate.value);
-
-  const url = `/export-excel?${params.toString()}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    alert("Failed to download Excel.");
-    return;
-  }
-  const blob = await res.blob();
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "invoices.xlsx";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  const today = new Date();
+  const monthValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  monthInput.value = monthValue;
+  monthInput.addEventListener("change", () => {
+    loadSalesDashboard();
+  });
 }
 
-function init() {
-  const fromDate = byId("fromDate");
-  const toDate = byId("toDate");
-  const filterBtn = byId("filterBtn");
-  const downloadExcelBtn = byId("downloadExcelBtn");
-
-  if (!fromDate || !toDate || !filterBtn || !downloadExcelBtn) {
-    console.error("Reports page elements missing. Check reports template markup.");
-    return;
-  }
-
-  const now = new Date();
-  const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  fromDate.value = toISODateString(start);
-  toDate.value = toISODateString(now);
-
-  filterBtn.addEventListener("click", onFilter);
-  downloadExcelBtn.addEventListener("click", downloadExcel);
-
-  onFilter();
-}
-
-init();
+document.addEventListener("DOMContentLoaded", () => {
+  initializeMonthSelector();
+  loadSalesDashboard();
+});

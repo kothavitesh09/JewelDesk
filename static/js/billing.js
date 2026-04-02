@@ -10,6 +10,100 @@ function money3(n) {
   return x.toFixed(3);
 }
 
+function toast(message, type = "success") {
+  window.JewelDeskUI?.toast?.(message, type);
+}
+
+window.__INVENTORY_ITEM_OPTIONS__ = [];
+
+function metalFamily(type) {
+  return String(type || "").toLowerCase().includes("silver") ? "Silver" : "Gold";
+}
+
+function matchesSelectedType(item, selectedType) {
+  const normalizedSelected = String(selectedType || "").trim();
+  if (!normalizedSelected) return true;
+  const itemType = String(item?.metal_type || "").trim();
+  return itemType === normalizedSelected;
+}
+
+async function loadInventoryOptions() {
+  try {
+    const res = await fetch("/inventory-items");
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data && data.error ? data.error : "Failed to load inventory items.");
+    }
+    window.__INVENTORY_ITEM_OPTIONS__ = Array.isArray(data.items) ? data.items : [];
+    ensureItemDatalist();
+  } catch (error) {
+    window.__INVENTORY_ITEM_OPTIONS__ = [];
+  }
+}
+
+function ensureItemDatalist() {
+  let datalist = document.getElementById("billingItemOptions");
+  if (!datalist) {
+    datalist = document.createElement("datalist");
+    datalist.id = "billingItemOptions";
+    document.body.appendChild(datalist);
+  }
+
+  datalist.innerHTML = (window.__INVENTORY_ITEM_OPTIONS__ || [])
+    .map((item) => `<option value="${String(item.item_name || "").replace(/"/g, "&quot;")}"></option>`)
+    .join("");
+}
+
+function getBillingItemOptions(type, selected) {
+  const matchingItems = (window.__INVENTORY_ITEM_OPTIONS__ || []).filter(
+    (item) => matchesSelectedType(item, type),
+  );
+  const hasSelected = selected && matchingItems.some((item) => item.item_name === selected);
+  const selectedOption = hasSelected || !selected
+    ? ""
+    : `<option value="${String(selected).replace(/"/g, "&quot;")}" selected>${String(selected).replace(/"/g, "&quot;")}</option>`;
+
+  return `${selectedOption}<option value="">Select item</option>${matchingItems
+    .map((item) => {
+      const itemName = String(item.item_name || "");
+      const escapedItemName = itemName.replace(/"/g, "&quot;");
+      return `<option value="${escapedItemName}" ${itemName === selected ? "selected" : ""}>${escapedItemName}</option>`;
+    })
+    .join("")}`;
+}
+
+function setValueIfPresent(id, value) {
+  const element = document.getElementById(id);
+  if (element) {
+    element.value = value ?? "";
+  }
+}
+
+function updateBillingMeta(summary = {}) {
+  const rows = Array.from(document.querySelectorAll("#itemsTbody tr"));
+  const itemCount = rows.length;
+  const taxType = getTaxType() === "igst" ? "IGST" : "CGST + SGST";
+
+  const itemCountBadge = document.getElementById("itemCountBadge");
+  const heroItemCount = document.getElementById("heroItemCount");
+  const heroTaxType = document.getElementById("heroTaxType");
+  const heroInvoiceTotalText = document.getElementById("heroInvoiceTotalText");
+  const previewTaxableAmount = document.getElementById("previewTaxableAmount");
+  const previewGstAmount = document.getElementById("previewGstAmount");
+  const previewGrandTotal = document.getElementById("previewGrandTotal");
+  const itemsEmptyState = document.getElementById("itemsEmptyState");
+
+  const itemLabel = `${itemCount} item${itemCount === 1 ? "" : "s"}`;
+  if (itemCountBadge) itemCountBadge.textContent = itemLabel;
+  if (heroItemCount) heroItemCount.textContent = itemLabel;
+  if (heroTaxType) heroTaxType.textContent = taxType;
+  if (heroInvoiceTotalText) heroInvoiceTotalText.textContent = money2(summary.finalAmount || 0);
+  if (previewTaxableAmount) previewTaxableAmount.textContent = money2(summary.total || 0);
+  if (previewGstAmount) previewGstAmount.textContent = money2((summary.cgst || 0) + (summary.sgst || 0) + (summary.igst || 0));
+  if (previewGrandTotal) previewGrandTotal.textContent = money2(summary.finalAmount || 0);
+  if (itemsEmptyState) itemsEmptyState.style.display = itemCount ? "none" : "block";
+}
+
 function getPaymentMode() {
   const bankChecked = document.getElementById("paymentModeBank").checked;
   return bankChecked ? "bank" : "cash";
@@ -33,28 +127,62 @@ function setTaxType(taxType) {
 }
 
 function recalcItemRow(tr) {
-  const qty = Number(tr.querySelector(".item-qty").value);
-  const invoiceAmount = Number(tr.querySelector(".item-amount-input").value);
+  const quantityValue = Number(tr.querySelector(".item-quantity").value);
+  const grossWeight = Number(tr.querySelector(".item-gross-weight").value);
+  const stoneWeight = Number(tr.querySelector(".item-stone-weight").value);
+  const netWeightInput = tr.querySelector(".item-net-weight");
+  const netWeightValue = Number(netWeightInput.value);
+  const valueAddition = Number(tr.querySelector(".item-value-addition").value);
+  const rateInput = tr.querySelector(".item-rate-input");
+  const stoneAmount = Number(tr.querySelector(".item-stone-amount").value);
+  const netAmountInput = tr.querySelector(".item-net-amount");
+  const netAmountValue = Number(netAmountInput.value);
 
-  const rateCell = tr.querySelector(".item-rate");
+  const safeQuantity = isFinite(quantityValue) ? quantityValue : 0;
+  const safeGrossWeight = isFinite(grossWeight) ? grossWeight : 0;
+  const safeStoneWeight = isFinite(stoneWeight) ? stoneWeight : 0;
+  const derivedNetWeight = Math.max(safeGrossWeight - safeStoneWeight, 0);
+  const safeNetWeight = isFinite(netWeightValue) && netWeightValue > 0 ? netWeightValue : derivedNetWeight;
+  const safeValueAddition = isFinite(valueAddition) ? valueAddition : 0;
+  const safeStoneAmount = isFinite(stoneAmount) ? stoneAmount : 0;
+
+  const safeNetAmount = isFinite(netAmountValue) ? netAmountValue : 0;
+  const computedRate = safeQuantity > 0 && safeNetWeight > 0
+    ? (safeNetAmount / safeNetWeight) / safeQuantity
+    : 0;
+
+  if (document.activeElement !== netWeightInput) {
+    netWeightInput.value = safeNetWeight > 0 ? money3(safeNetWeight) : "";
+  }
+  rateInput.value = computedRate > 0 ? money2(computedRate) : "";
+
+  const invoiceAmount = safeNetAmount;
   let taxableAmount = 0;
-  if (isFinite(invoiceAmount)) {
+  if (isFinite(invoiceAmount) && invoiceAmount > 0) {
     taxableAmount = invoiceAmount / 1.03;
   }
-  const rate = isFinite(qty) && isFinite(taxableAmount) && qty > 0 ? taxableAmount / qty : 0;
-  rateCell.textContent = money2(rate);
 
-  return { invoiceAmount: isFinite(invoiceAmount) ? invoiceAmount : 0, taxableAmount, rate };
+  return {
+    invoiceAmount: isFinite(invoiceAmount) ? invoiceAmount : 0,
+    taxableAmount,
+    netWeight: safeNetWeight,
+    rate: computedRate,
+  };
 }
 
 function readItemsFromDOM() {
   const rows = Array.from(document.querySelectorAll("#itemsTbody tr"));
   return rows.map((tr) => ({
     particulars: tr.querySelector(".item-particulars").value.trim(),
-    hsn_code: tr.querySelector(".item-hsn").value.trim(),
-    qty_gms: Number(tr.querySelector(".item-qty").value),
-    amount: Number(tr.querySelector(".item-amount-input").value),
-    rate_per_g: Number(tr.querySelector(".item-rate").textContent || 0),
+    item_type: tr.querySelector(".item-type").value.trim(),
+    quantity: Number(tr.querySelector(".item-quantity").value),
+    gross_weight: Number(tr.querySelector(".item-gross-weight").value),
+    stone_weight: Number(tr.querySelector(".item-stone-weight").value),
+    qty_gms: Number(tr.querySelector(".item-net-weight").value),
+    value_addition: Number(tr.querySelector(".item-value-addition").value),
+    amount: Number(tr.querySelector(".item-net-amount").value),
+    rate_per_g: Number(tr.querySelector(".item-rate-input").value),
+    stone_amount: Number(tr.querySelector(".item-stone-amount").value),
   }));
 }
 
@@ -71,7 +199,7 @@ function recalcTotals() {
   const taxType = getTaxType();
 
   rows.forEach((tr) => {
-    const amount = Number(tr.querySelector(".item-amount-input").value);
+    const amount = Number(tr.querySelector(".item-net-amount").value);
     if (isFinite(amount) && amount > 0) {
       invoiceTotal += amount;
     }
@@ -102,53 +230,96 @@ function recalcTotals() {
   document.getElementById("sgstText").textContent = money2(sgst);
   document.getElementById("igstText").textContent = money2(igst);
   document.getElementById("invoiceTotalText").textContent = money2(finalAmount);
-
-  return { total, cgst, sgst, igst, finalAmount };
+  const summary = { total, cgst, sgst, igst, finalAmount };
+  updateBillingMeta(summary);
+  return summary;
 }
 
 function bindRowEvents(tr) {
-  tr.querySelector(".item-qty").addEventListener("input", () => {
+  const typeSelect = tr.querySelector(".item-type");
+  const descriptionSelect = tr.querySelector(".item-particulars");
+
+  typeSelect.addEventListener("change", () => {
+    const selected = descriptionSelect.value;
+    descriptionSelect.innerHTML = getBillingItemOptions(typeSelect.value, selected);
     recalcItemRow(tr);
     recalcTotals();
   });
-  tr.querySelector(".item-amount-input").addEventListener("input", () => {
-    recalcItemRow(tr);
-    recalcTotals();
+
+  tr.querySelectorAll(".item-quantity, .item-gross-weight, .item-stone-weight, .item-value-addition, .item-stone-amount, .item-net-amount, .item-net-weight, .item-type, .item-particulars").forEach((input) => {
+    input.addEventListener("input", () => {
+      recalcItemRow(tr);
+      recalcTotals();
+    });
+    input.addEventListener("change", () => {
+      recalcItemRow(tr);
+      recalcTotals();
+    });
   });
   tr.querySelector(".removeItemBtn").addEventListener("click", () => {
     tr.remove();
     renderRowIndexes();
-    recalcTotals();
     if (document.querySelectorAll("#itemsTbody tr").length === 0) {
       addItemRow();
     }
+    recalcTotals();
   });
 }
 
 function addItemRow(item = {}, options = {}) {
   const tbody = document.getElementById("itemsTbody");
   const tr = document.createElement("tr");
+  const itemType = String(item.item_type || "Gold");
+  const quantity = item.quantity ?? "";
+  const grossWeight = item.gross_weight ?? item.qty_gms ?? "";
+  const stoneWeight = item.stone_weight ?? "";
+  const netWeight = item.qty_gms ?? "";
+  const valueAddition = item.value_addition ?? "";
+  const ratePerG = item.rate_per_g ?? "";
+  const stoneAmount = item.stone_amount ?? "";
   const invoiceAmount = item.invoice_amount ?? item.amount ?? "";
 
   tr.innerHTML = `
     <td class="text-center row-no align-middle" data-label="S. No">1</td>
-    <td class="align-middle" data-label="Particulars">
-      <input type="text" class="form-control form-control-sm item-particulars" placeholder="Item name" value="${String(item.particulars || "").replace(/"/g, "&quot;")}" />
+    <td class="align-middle" data-label="Description">
+      <select class="form-select form-select-sm item-particulars">
+        ${getBillingItemOptions(itemType, String(item.particulars || ""))}
+      </select>
     </td>
-    <td class="align-middle" data-label="HSN Code">
-      <input type="text" class="form-control form-control-sm item-hsn" placeholder="HSN" value="${String(item.hsn_code || "").replace(/"/g, "&quot;")}" />
+    <td class="align-middle" data-label="Type">
+      <select class="form-select form-select-sm item-type">
+        <option value="Gold" ${itemType === "Gold" ? "selected" : ""}>Gold</option>
+        <option value="Gold Pure" ${itemType === "Gold Pure" ? "selected" : ""}>Gold Pure</option>
+        <option value="Silver" ${itemType === "Silver" ? "selected" : ""}>Silver</option>
+        <option value="Silver Pure" ${itemType === "Silver Pure" ? "selected" : ""}>Silver Pure</option>
+      </select>
     </td>
-    <td class="align-middle" data-label="Qty in Gms">
-      <input type="number" min="0" step="0.001" class="form-control form-control-sm item-qty" placeholder="0.000" value="${item.qty_gms ?? ""}" />
+    <td class="align-middle" data-label="Qty">
+      <input type="number" min="0" step="1" class="form-control form-control-sm item-quantity" placeholder="0" value="${quantity}" />
     </td>
-    <td class="align-middle" data-label="Amount (Rs, Ps)">
-      <input type="number" min="0" step="0.01" class="form-control form-control-sm item-amount-input" placeholder="0.00" value="${invoiceAmount === "" ? "" : Number(invoiceAmount)}" />
+    <td class="align-middle" data-label="GR WT">
+      <input type="number" min="0" step="0.001" class="form-control form-control-sm item-gross-weight" placeholder="0.000" value="${grossWeight}" />
     </td>
-    <td class="align-middle" data-label="Rate per Gms">
-      <span class="item-rate d-inline-block" style="min-width: 90px;">0.00</span>
+    <td class="align-middle" data-label="ST. WT">
+      <input type="number" min="0" step="0.001" class="form-control form-control-sm item-stone-weight" placeholder="0.000" value="${stoneWeight}" />
+    </td>
+    <td class="align-middle" data-label="NET WT">
+      <input type="number" min="0" step="0.001" class="form-control form-control-sm item-net-weight" placeholder="0.000" value="${netWeight}" />
+    </td>
+    <td class="align-middle" data-label="VA.">
+      <input type="number" min="0" step="0.001" class="form-control form-control-sm item-value-addition" placeholder="0.000" value="${valueAddition}" />
+    </td>
+    <td class="align-middle" data-label="Rate">
+      <input type="number" min="0" step="0.01" class="form-control form-control-sm item-rate-input" placeholder="0.00" value="${ratePerG}" readonly />
+    </td>
+    <td class="align-middle" data-label="ST AMT">
+      <input type="number" min="0" step="0.01" class="form-control form-control-sm item-stone-amount" placeholder="0.00" value="${stoneAmount}" />
+    </td>
+    <td class="align-middle" data-label="NET AMT (Rs.)">
+      <input type="number" min="0" step="0.01" class="form-control form-control-sm item-net-amount" placeholder="0.00" value="${invoiceAmount === "" ? "" : Number(invoiceAmount)}" />
     </td>
     <td class="text-center align-middle" data-label="Action">
-      <button type="button" class="btn btn-sm btn-outline-danger removeItemBtn">X</button>
+      <button type="button" class="btn btn-sm btn-outline-danger removeItemBtn" aria-label="Remove item">&#128465;</button>
     </td>
   `;
 
@@ -176,6 +347,8 @@ function getValidatedPayload() {
     throw new Error("Customer Name is required.");
   }
 
+  const customerAddress = document.getElementById("customerAddress").value.trim();
+  const customerPhone = document.getElementById("customerPhone").value.trim();
   const partyGstNo = document.getElementById("partyGstNo").value.trim();
   const rows = readItemsFromDOM();
   const filtered = [];
@@ -183,15 +356,19 @@ function getValidatedPayload() {
   for (const r of rows) {
     const hasAnyField =
       (r.particulars && r.particulars.length) ||
-      (r.hsn_code && r.hsn_code.length) ||
+      (r.item_type && r.item_type.length) ||
+      Number.isFinite(r.quantity) ||
+      Number.isFinite(r.gross_weight) ||
+      Number.isFinite(r.stone_weight) ||
       Number.isFinite(r.qty_gms) ||
+      Number.isFinite(r.value_addition) ||
       Number.isFinite(r.amount);
 
     if (!hasAnyField) continue;
 
     const ok = r.particulars && Number(r.qty_gms) > 0 && Number(r.amount) > 0;
     if (!ok) {
-      throw new Error("Each added item must have: Particulars, Weight (grams) and Amount.");
+      throw new Error("Each added item must have: Description, Net Weight, and Net Amount.");
     }
     filtered.push(r);
   }
@@ -202,6 +379,8 @@ function getValidatedPayload() {
 
   return {
     customer_name: customerName,
+    customer_address: customerAddress || "",
+    customer_phone: customerPhone || "",
     party_gst_no: partyGstNo || "",
     payment_mode: getPaymentMode(),
     items: filtered,
@@ -240,6 +419,13 @@ function applyBillSummary(bill) {
   document.getElementById("sgstText").textContent = money2(bill.sgst);
   document.getElementById("igstText").textContent = money2(bill.igst || 0);
   document.getElementById("invoiceTotalText").textContent = money2(bill.final_amount);
+  updateBillingMeta({
+    total: bill.total,
+    cgst: bill.cgst,
+    sgst: bill.sgst,
+    igst: bill.igst || 0,
+    finalAmount: bill.final_amount,
+  });
 }
 
 function setButtonsEnabledAfterInvoice() {
@@ -250,6 +436,25 @@ function setButtonsEnabledAfterInvoice() {
 
 function getCurrentInvoiceNo() {
   return window.__CURRENT_INVOICE_NO__ || null;
+}
+
+function buildPdfUrl(invoiceNo, download) {
+  const params = new URLSearchParams({
+    invoice_no: String(invoiceNo),
+    download: download ? "1" : "0",
+    t: String(Date.now()),
+  });
+
+  const branding = window.__JEWELDESK_USER_BRANDING__ || {};
+  const logoPath = branding.logo_path || "";
+  const shopNameImagePath = branding.shop_name_image_path || "";
+  const shopName = branding.shop_name || "";
+
+  if (logoPath) params.set("logo_path", logoPath);
+  if (shopNameImagePath) params.set("shop_name_image_path", shopNameImagePath);
+  if (shopName) params.set("shop_name", shopName);
+
+  return `/generate-pdf?${params.toString()}`;
 }
 
 function getEditQueryInvoiceNo() {
@@ -273,6 +478,8 @@ function enableEditMode() {
   document.getElementById("cancelEditBtn").style.display = "inline-block";
   document.getElementById("invoiceNoInput").disabled = true;
   document.getElementById("customerName").disabled = false;
+  document.getElementById("customerAddress").disabled = false;
+  document.getElementById("customerPhone").disabled = false;
   document.getElementById("partyGstNo").disabled = false;
   document.querySelectorAll("#itemsTbody input, #itemsTbody button").forEach((el) => {
     el.disabled = false;
@@ -290,6 +497,8 @@ function disableEditMode() {
   document.getElementById("cancelEditBtn").style.display = "none";
   document.getElementById("invoiceNoInput").disabled = Boolean(getCurrentInvoiceNo());
   document.getElementById("customerName").disabled = false;
+  document.getElementById("customerAddress").disabled = false;
+  document.getElementById("customerPhone").disabled = false;
   document.getElementById("partyGstNo").disabled = false;
   document.querySelectorAll("#itemsTbody input, #itemsTbody button").forEach((el) => {
     el.disabled = false;
@@ -303,6 +512,8 @@ async function loadBillIntoForm(invoiceNo, options = {}) {
   const bill = typeof invoiceNo === "object" && invoiceNo !== null ? invoiceNo : await fetchBill(invoiceNo);
   document.getElementById("invoiceNoInput").value = bill.invoice_no_text || bill.invoice_no;
   document.getElementById("customerName").value = bill.customer_name || "";
+  setValueIfPresent("customerAddress", bill.customer_address || "");
+  setValueIfPresent("customerPhone", bill.customer_phone || "");
   document.getElementById("partyGstNo").value = bill.party_gst_no || "";
   setPaymentMode(bill.payment_mode || "cash");
   setTaxType(bill.tax_type || "cgst_sgst");
@@ -324,7 +535,7 @@ async function loadBillIntoForm(invoiceNo, options = {}) {
 async function updateCurrentBill() {
   const invoiceNo = getCurrentInvoiceNo();
   if (!invoiceNo) {
-    alert("No invoice to update.");
+    toast("No invoice to update.", "error");
     return;
   }
 
@@ -332,7 +543,7 @@ async function updateCurrentBill() {
   try {
     payload = getValidatedPayload();
   } catch (e) {
-    alert(e.message || "Invalid invoice data.");
+    toast(e.message || "Invalid invoice data.", "error");
     return;
   }
 
@@ -349,9 +560,9 @@ async function updateCurrentBill() {
     }
 
     await loadBillIntoForm(updated, { editMode: false });
-    alert("Bill updated successfully.");
+    toast("Bill updated successfully.", "success");
   } catch (e) {
-    alert(e.message || "Error while updating bill.");
+    toast(e.message || "Error while updating bill.", "error");
   } finally {
     document.getElementById("updateBillBtn").disabled = false;
   }
@@ -404,6 +615,11 @@ function wireActions() {
   document.getElementById("addItemBtn").addEventListener("click", () => {
     addItemRow();
     recalcTotals();
+    toast("New item row added.", "info");
+  });
+
+  document.getElementById("downloadExcelBtn").addEventListener("click", () => {
+    window.location.href = `/export-excel?t=${Date.now()}`;
   });
 
   document.getElementById("generateBillBtn").addEventListener("click", async () => {
@@ -411,7 +627,7 @@ function wireActions() {
     try {
       payload = getValidatedPayload();
     } catch (e) {
-      alert(e.message || "Invalid invoice data.");
+      toast(e.message || "Invalid invoice data.", "error");
       return;
     }
 
@@ -424,9 +640,9 @@ function wireActions() {
       document.getElementById("generateBillBtn").disabled = true;
       const created = await postCreateBill(payload);
       await loadBillIntoForm(created, { editMode: false });
-      alert("Bill created successfully.");
+      toast("Bill created successfully.", "success");
     } catch (e) {
-      alert(e.message || "Error while creating bill.");
+      toast(e.message || "Error while creating bill.", "error");
     } finally {
       document.getElementById("generateBillBtn").disabled = false;
     }
@@ -435,14 +651,14 @@ function wireActions() {
   document.getElementById("downloadPdfBtn").addEventListener("click", async () => {
     const invoiceNo = getCurrentInvoiceNo();
     if (!invoiceNo) {
-      alert("Generate bill first.");
+      toast("Generate bill first.", "error");
       return;
     }
 
-    const url = `/generate-pdf?invoice_no=${encodeURIComponent(invoiceNo)}&download=1&t=${Date.now()}`;
+    const url = buildPdfUrl(invoiceNo, true);
     const res = await fetch(url);
     if (!res.ok) {
-      alert("Failed to download PDF.");
+      toast("Failed to download PDF.", "error");
       return;
     }
     const blob = await res.blob();
@@ -452,19 +668,20 @@ function wireActions() {
     document.body.appendChild(a);
     a.click();
     a.remove();
+    toast("PDF download started.", "success");
   });
 
   document.getElementById("printBillBtn").addEventListener("click", () => {
     const invoiceNo = getCurrentInvoiceNo();
     if (!invoiceNo) {
-      alert("Generate bill first.");
+      toast("Generate bill first.", "error");
       return;
     }
 
-    const printUrl = `/generate-pdf?invoice_no=${encodeURIComponent(invoiceNo)}&download=0&t=${Date.now()}`;
+    const printUrl = buildPdfUrl(invoiceNo, false);
     const w = window.open(printUrl, "_blank");
     if (!w) {
-      alert("Popup blocked. Please allow popups for printing.");
+      toast("Popup blocked. Please allow popups for printing.", "error");
       return;
     }
     try {
@@ -490,6 +707,7 @@ function wireActions() {
 }
 
 async function init() {
+  await loadInventoryOptions();
   wireActions();
   addItemRow();
   recalcTotals();
@@ -503,7 +721,7 @@ async function init() {
   try {
     await loadBillIntoForm(invoiceNo, { editMode: shouldStartInEditMode() });
   } catch (e) {
-    alert(e.message || "Failed to load invoice.");
+    toast(e.message || "Failed to load invoice.", "error");
   }
 }
 
