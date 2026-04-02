@@ -52,6 +52,9 @@ ADMIN_USERNAME = _env("ADMIN_USERNAME", "kothavitesh")
 ADMIN_PASSWORD = _env("ADMIN_PASSWORD", "Rkvc@2005")
 UPLOAD_MAX_MB = int(_env("UPLOAD_MAX_MB", "4"))
 UPLOAD_DIR = _env("UPLOAD_DIR", "static/uploads/branding")
+CLOUDINARY_CLOUD_NAME = _env("CLOUDINARY_CLOUD_NAME", "")
+CLOUDINARY_API_KEY = _env("CLOUDINARY_API_KEY", "")
+CLOUDINARY_API_SECRET = _env("CLOUDINARY_API_SECRET", "")
 
 
 # Shop details

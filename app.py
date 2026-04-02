@@ -8,6 +8,8 @@ from io import BytesIO
 from pathlib import Path
 
 import bcrypt
+import cloudinary
+import cloudinary.uploader
 import jwt
 from flask import Flask, g, jsonify, make_response, redirect, render_template, request, send_file, url_for
 from werkzeug.utils import secure_filename
@@ -19,6 +21,9 @@ from config import (
     ADMIN_USERNAME,
     APP_SECRET_KEY,
     AUTH_COOKIE_NAME,
+    CLOUDINARY_API_KEY,
+    CLOUDINARY_API_SECRET,
+    CLOUDINARY_CLOUD_NAME,
     JWT_ALGORITHM,
     JWT_EXPIRES_DAYS,
     JWT_SECRET_KEY,
@@ -55,6 +60,15 @@ ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^[0-9+\-\s]{7,20}$")
 UPLOAD_PATH = Path(__file__).resolve().parent / UPLOAD_DIR
+USE_CLOUDINARY = bool(CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET)
+
+if USE_CLOUDINARY:
+    cloudinary.config(
+        cloud_name=CLOUDINARY_CLOUD_NAME,
+        api_key=CLOUDINARY_API_KEY,
+        api_secret=CLOUDINARY_API_SECRET,
+        secure=True,
+    )
 
 
 def _normalize_metal_type(value: str, default: str = "Gold"):
@@ -99,7 +113,10 @@ def _clean_text(value: str, max_len: int = 200) -> str:
 def _asset_url(path_value: str | None) -> str | None:
     if not path_value:
         return None
-    return url_for("static", filename=str(path_value).replace("\\", "/"))
+    path_str = str(path_value).strip()
+    if path_str.startswith("http://") or path_str.startswith("https://"):
+        return path_str
+    return url_for("static", filename=path_str.replace("\\", "/"))
 
 
 def _hash_password(raw_password: str) -> str:
@@ -177,6 +194,20 @@ def _validate_image_upload(file_storage, field_label: str):
 
 def _store_image(file_storage, subfolder: str, prefix: str) -> str:
     _, ext = _validate_image_upload(file_storage, prefix.replace("_", " ").title())
+    if USE_CLOUDINARY:
+        file_storage.stream.seek(0)
+        upload_result = cloudinary.uploader.upload(
+            file_storage.stream,
+            folder=f"jeweldesk/{subfolder}",
+            public_id=f"{prefix}_{uuid.uuid4().hex}",
+            resource_type="image",
+            overwrite=True,
+        )
+        secure_url = str(upload_result.get("secure_url") or "").strip()
+        if not secure_url:
+            raise ValueError("Image upload failed. Please try again.")
+        return secure_url
+
     target_dir = UPLOAD_PATH / subfolder
     target_dir.mkdir(parents=True, exist_ok=True)
     file_name = f"{prefix}_{uuid.uuid4().hex}{ext}"

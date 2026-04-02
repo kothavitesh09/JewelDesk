@@ -2,6 +2,8 @@ from io import BytesIO
 import os
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
+from urllib.parse import urlparse
+from urllib.request import urlopen
 
 from openpyxl import load_workbook
 from reportlab.lib.pagesizes import A4
@@ -364,11 +366,15 @@ def _dynamic_cell_values(
     return dynamic
 
 
-def _resolve_image_path(path_value: str | None, fallback: str | None = None) -> Path | None:
+def _resolve_image_source(path_value: str | None, fallback: str | None = None):
     for candidate in (path_value, fallback):
         if not candidate:
             continue
-        path = Path(str(candidate).strip())
+        candidate_str = str(candidate).strip()
+        parsed = urlparse(candidate_str)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            return candidate_str
+        path = Path(candidate_str)
         if not path.is_absolute():
             path = Path(__file__).resolve().parent / path
         if path.exists() and path.is_file():
@@ -398,14 +404,18 @@ def _anchor_box_in_range(anchor, row_edges: List[float], col_edges: List[float],
     return left, bottom, right, top
 
 
-def _draw_image(c: canvas.Canvas, image_path: Path | None, box):
-    if image_path is None:
+def _draw_image(c: canvas.Canvas, image_source, box):
+    if image_source is None:
         return
     try:
         left, bottom, right, top = box
         if right <= left or top <= bottom:
             return
-        img = ImageReader(str(image_path))
+        if isinstance(image_source, Path):
+            img = ImageReader(str(image_source))
+        else:
+            with urlopen(str(image_source)) as response:
+                img = ImageReader(BytesIO(response.read()))
         c.drawImage(img, left, bottom, width=right - left, height=top - bottom, preserveAspectRatio=True, anchor="c", mask="auto")
     except Exception:
         return
@@ -430,11 +440,11 @@ def _draw_header_images(c: canvas.Canvas, ws, row_edges: List[float], col_edges:
     logo_box = _anchor_box(images[0].anchor, row_edges, col_edges) if len(images) >= 1 else _box_for(1, 1, row_edges, col_edges, (1, 1, 5, 2))
     shop_name_box = _anchor_box(images[1].anchor, row_edges, col_edges) if len(images) >= 2 else _box_for(1, 2, row_edges, col_edges, (1, 2, 5, 8))
 
-    logo_path = _resolve_image_path(
+    logo_path = _resolve_image_source(
         _shop_value(shop_overrides, invoice, "logo_path"),
         os.path.join("static", "images", "shop_logo.png"),
     )
-    shop_name_image_path = _resolve_image_path(
+    shop_name_image_path = _resolve_image_source(
         _shop_value(shop_overrides, invoice, "shop_name_image_path"),
         os.path.join("static", "images", "shop_name.png"),
     )
@@ -461,7 +471,7 @@ def _draw_terms_page_image(c: canvas.Canvas, ws, row_edges: List[float], col_edg
     if image is None:
         return
 
-    logo_path = _resolve_image_path(
+    logo_path = _resolve_image_source(
         _shop_value(shop_overrides, invoice, "logo_path"),
         os.path.join("static", "images", "shop_logo.png"),
     )
