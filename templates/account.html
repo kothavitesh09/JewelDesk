@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Branding | JewelDesk{% endblock %}
+{% block content %}
+  <section class="reports-shell">
+    <div class="page-hero">
+      <div>
+        <span class="page-eyebrow">Account Branding</span>
+        <h1 class="page-title">Update Shop Assets</h1>
+        <p class="page-copy">Refresh the logo or shop-name image used on every invoice for your tenant workspace.</p>
+      </div>
+    </div>
+
+    {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+    {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
+
+    <div class="premium-card">
+      <form method="post" enctype="multipart/form-data" class="auth-form-grid">
+        <div>
+          <label class="form-label premium-label">Shop Name</label>
+          <input class="form-control premium-input" value="{{ current_user.shop_name }}" disabled />
+        </div>
+        <div>
+          <label class="form-label premium-label">Owner Name</label>
+          <input class="form-control premium-input" name="owner_name" value="{{ current_user.owner_name }}" required />
+        </div>
+        <div class="auth-form-grid__full">
+          <label class="form-label premium-label">Shop Phone</label>
+          <input class="form-control premium-input" name="phone" value="{{ current_user.phone }}" required />
+        </div>
+        <div>
+          <label class="form-label premium-label">Shop GSTIN</label>
+          <input class="form-control premium-input" name="shop_gstin" value="{{ current_user.shop_gstin or '' }}" required />
+        </div>
+        <div class="auth-form-grid__full">
+          <label class="form-label premium-label">Shop Address</label>
+          <textarea class="form-control premium-input premium-textarea" name="shop_address" rows="3" required>{{ current_user.shop_address or '' }}</textarea>
+        </div>
+        <div>
+          <label class="form-label premium-label">Replace Logo</label>
+          <input type="file" class="form-control premium-input" name="shop_logo" accept=".png,.jpg,.jpeg" data-preview-target="accountLogoPreview" />
+          <img id="accountLogoPreview" class="image-preview" src="{{ user_branding.logo_url or '' }}" {% if not user_branding.logo_url %}style="display:none;"{% endif %} alt="Current logo" />
+        </div>
+        <div>
+          <label class="form-label premium-label">Replace Shop Name Image</label>
+          <input type="file" class="form-control premium-input" name="shop_name_image" accept=".png,.jpg,.jpeg" data-preview-target="accountNamePreview" />
+          <img id="accountNamePreview" class="image-preview image-preview--wide" src="{{ user_branding.shop_name_image_url or '' }}" {% if not user_branding.shop_name_image_url %}style="display:none;"{% endif %} alt="Current shop name image" />
+        </div>
+        <div class="auth-form-grid__full">
+          <button type="submit" class="btn btn-premium-primary">Save Branding</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <script>
+    document.querySelectorAll("[data-preview-target]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const preview = document.getElementById(input.dataset.previewTarget);
+        const [file] = input.files || [];
+        if (!preview || !file) return;
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = "block";
+      });
+    });
+  </script>
+{% endblock %}
