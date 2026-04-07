@@ -28,6 +28,14 @@ def _money(value: Any) -> str:
         return "0.00"
 
 
+def _money_or_blank(value: Any) -> str:
+    try:
+        amount = float(value)
+    except Exception:
+        return ""
+    return _money(amount) if abs(amount) > 0.0001 else ""
+
+
 def _qty(value: Any) -> str:
     try:
         num = float(value)
@@ -351,6 +359,17 @@ def _dynamic_cell_values(
         dynamic[f"I{idx}"] = _money(item.get("stone_amount", 0))
         dynamic[f"J{idx}"] = _money(item.get("invoice_amount", item.get("amount", 0)))
 
+    payment_mode = str(invoice.get("payment_mode") or "cash").strip().lower()
+    if payment_mode == "cash_bank":
+        cash_amount = invoice.get("cash_amount", 0)
+        bank_amount = invoice.get("bank_amount", 0)
+    elif payment_mode == "bank":
+        cash_amount = 0
+        bank_amount = invoice.get("bank_amount", invoice.get("final_amount", 0))
+    else:
+        cash_amount = invoice.get("cash_amount", invoice.get("final_amount", 0))
+        bank_amount = 0
+
     if last_page:
         dynamic["J26"] = _money(invoice.get("total", 0))
         dynamic["J27"] = _money(invoice.get("discount", 0))
@@ -359,6 +378,8 @@ def _dynamic_cell_values(
         dynamic["J30"] = _money(invoice.get("igst", 0))
         dynamic["J31"] = _money(invoice.get("final_amount", 0))
         dynamic["C32"] = _amount_to_words(invoice.get("final_amount", 0))
+        dynamic["C35"] = _money_or_blank(cash_amount)
+        dynamic["C36"] = _money_or_blank(bank_amount)
         dynamic["F34"] = f"For {_shop_value(shop_overrides, invoice, 'shop_name', SHOP_NAME) or SHOP_NAME}"
     else:
         dynamic["C32"] = "Continued on next page..."

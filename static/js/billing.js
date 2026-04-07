@@ -105,14 +105,34 @@ function updateBillingMeta(summary = {}) {
 }
 
 function getPaymentMode() {
+  const cashBankChecked = document.getElementById("paymentModeCashBank").checked;
   const bankChecked = document.getElementById("paymentModeBank").checked;
+  if (cashBankChecked) return "cash_bank";
   return bankChecked ? "bank" : "cash";
 }
 
 function setPaymentMode(paymentMode) {
-  const normalized = paymentMode === "bank" ? "bank" : "cash";
+  const normalized = paymentMode === "bank" || paymentMode === "cash_bank" ? paymentMode : "cash";
   document.getElementById("paymentModeCash").checked = normalized === "cash";
   document.getElementById("paymentModeBank").checked = normalized === "bank";
+  document.getElementById("paymentModeCashBank").checked = normalized === "cash_bank";
+  toggleSplitPaymentFields(normalized);
+}
+
+function toggleSplitPaymentFields(paymentMode) {
+  const splitPaymentFields = document.getElementById("splitPaymentFields");
+  const cashAmountInput = document.getElementById("cashAmountInput");
+  const bankAmountInput = document.getElementById("bankAmountInput");
+  const isSplitPayment = paymentMode === "cash_bank";
+
+  splitPaymentFields.style.display = isSplitPayment ? "block" : "none";
+  cashAmountInput.disabled = !isSplitPayment;
+  bankAmountInput.disabled = !isSplitPayment;
+
+  if (!isSplitPayment) {
+    cashAmountInput.value = "";
+    bankAmountInput.value = "";
+  }
 }
 
 function getTaxType() {
@@ -377,12 +397,37 @@ function getValidatedPayload() {
     throw new Error("Please add at least one valid item.");
   }
 
+  const summary = recalcTotals();
+  const paymentMode = getPaymentMode();
+  let cashAmount = null;
+  let bankAmount = null;
+
+  if (paymentMode === "cash_bank") {
+    cashAmount = Number(document.getElementById("cashAmountInput").value);
+    bankAmount = Number(document.getElementById("bankAmountInput").value);
+
+    if (!isFinite(cashAmount) || cashAmount <= 0) {
+      throw new Error("Cash amount must be greater than 0 for Cash + Bank.");
+    }
+    if (!isFinite(bankAmount) || bankAmount <= 0) {
+      throw new Error("Bank amount must be greater than 0 for Cash + Bank.");
+    }
+
+    const splitTotal = Math.round((cashAmount + bankAmount) * 100) / 100;
+    const finalAmount = Math.round(Number(summary.finalAmount || 0) * 100) / 100;
+    if (splitTotal !== finalAmount) {
+      throw new Error("Cash amount + Bank amount must equal the invoice total.");
+    }
+  }
+
   return {
     customer_name: customerName,
     customer_address: customerAddress || "",
     customer_phone: customerPhone || "",
     party_gst_no: partyGstNo || "",
-    payment_mode: getPaymentMode(),
+    payment_mode: paymentMode,
+    cash_amount: cashAmount,
+    bank_amount: bankAmount,
     items: filtered,
     tax_type: getTaxType(),
   };
@@ -484,9 +529,10 @@ function enableEditMode() {
   document.querySelectorAll("#itemsTbody input, #itemsTbody button").forEach((el) => {
     el.disabled = false;
   });
-  document.querySelectorAll("#taxTypeCgstSgst, #taxTypeIgst, #paymentModeCash, #paymentModeBank").forEach((el) => {
+  document.querySelectorAll("#taxTypeCgstSgst, #taxTypeIgst, #paymentModeCash, #paymentModeBank, #paymentModeCashBank, #cashAmountInput, #bankAmountInput").forEach((el) => {
     el.disabled = false;
   });
+  toggleSplitPaymentFields(getPaymentMode());
 }
 
 function disableEditMode() {
@@ -503,9 +549,10 @@ function disableEditMode() {
   document.querySelectorAll("#itemsTbody input, #itemsTbody button").forEach((el) => {
     el.disabled = false;
   });
-  document.querySelectorAll("#taxTypeCgstSgst, #taxTypeIgst, #paymentModeCash, #paymentModeBank").forEach((el) => {
+  document.querySelectorAll("#taxTypeCgstSgst, #taxTypeIgst, #paymentModeCash, #paymentModeBank, #paymentModeCashBank, #cashAmountInput, #bankAmountInput").forEach((el) => {
     el.disabled = false;
   });
+  toggleSplitPaymentFields(getPaymentMode());
 }
 
 async function loadBillIntoForm(invoiceNo, options = {}) {
@@ -516,6 +563,8 @@ async function loadBillIntoForm(invoiceNo, options = {}) {
   setValueIfPresent("customerPhone", bill.customer_phone || "");
   document.getElementById("partyGstNo").value = bill.party_gst_no || "";
   setPaymentMode(bill.payment_mode || "cash");
+  setValueIfPresent("cashAmountInput", bill.cash_amount ?? "");
+  setValueIfPresent("bankAmountInput", bill.bank_amount ?? "");
   setTaxType(bill.tax_type || "cgst_sgst");
 
   clearItems();
@@ -573,6 +622,7 @@ function wireActions() {
   const igstEl = document.getElementById("taxTypeIgst");
   const paymentCashEl = document.getElementById("paymentModeCash");
   const paymentBankEl = document.getElementById("paymentModeBank");
+  const paymentCashBankEl = document.getElementById("paymentModeCashBank");
 
   function enforceTaxTypeState(source) {
     setTaxType(source);
@@ -599,17 +649,42 @@ function wireActions() {
   }
 
   paymentCashEl.addEventListener("change", () => {
-    if (!paymentCashEl.checked && !paymentBankEl.checked) {
+    if (!paymentCashEl.checked && !paymentBankEl.checked && !paymentCashBankEl.checked) {
       paymentCashEl.checked = true;
     }
-    enforcePaymentModeState(paymentCashEl.checked ? "cash" : "bank");
+    if (paymentCashEl.checked) {
+      enforcePaymentModeState("cash");
+    } else if (paymentBankEl.checked) {
+      enforcePaymentModeState("bank");
+    } else {
+      enforcePaymentModeState("cash_bank");
+    }
   });
 
   paymentBankEl.addEventListener("change", () => {
-    if (!paymentCashEl.checked && !paymentBankEl.checked) {
+    if (!paymentCashEl.checked && !paymentBankEl.checked && !paymentCashBankEl.checked) {
       paymentBankEl.checked = true;
     }
-    enforcePaymentModeState(paymentBankEl.checked ? "bank" : "cash");
+    if (paymentBankEl.checked) {
+      enforcePaymentModeState("bank");
+    } else if (paymentCashBankEl.checked) {
+      enforcePaymentModeState("cash_bank");
+    } else {
+      enforcePaymentModeState("cash");
+    }
+  });
+
+  paymentCashBankEl.addEventListener("change", () => {
+    if (!paymentCashEl.checked && !paymentBankEl.checked && !paymentCashBankEl.checked) {
+      paymentCashBankEl.checked = true;
+    }
+    if (paymentCashBankEl.checked) {
+      enforcePaymentModeState("cash_bank");
+    } else if (paymentBankEl.checked) {
+      enforcePaymentModeState("bank");
+    } else {
+      enforcePaymentModeState("cash");
+    }
   });
 
   document.getElementById("addItemBtn").addEventListener("click", () => {
@@ -618,9 +693,12 @@ function wireActions() {
     toast("New item row added.", "info");
   });
 
-  document.getElementById("downloadExcelBtn").addEventListener("click", () => {
-    window.location.href = `/export-excel?t=${Date.now()}`;
-  });
+  const downloadExcelBtn = document.getElementById("downloadExcelBtn");
+  if (downloadExcelBtn) {
+    downloadExcelBtn.addEventListener("click", () => {
+      window.location.href = `/export-excel?t=${Date.now()}`;
+    });
+  }
 
   document.getElementById("generateBillBtn").addEventListener("click", async () => {
     let payload;

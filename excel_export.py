@@ -93,7 +93,7 @@ def _build_row(
         "SGST Amount": sgst_amount,
         "IGST Amount": igst_amount,
         "Total Amount": total_amount,
-        "Mode of Payment": payment_mode.title() if payment_mode else "",
+        "Mode of Payment": "Cash + Bank" if payment_mode == "cash_bank" else (payment_mode.title() if payment_mode else ""),
     }
 
 

@@ -48,4 +48,3 @@
 - Invoice numbers are auto-incremented and persist in MongoDB via a counter collection.
 - Excel export is filtered by the provided date range and exports one row per invoice item.
 - PDF layout uses fixed column widths and grid borders for an invoice-style appearance. Update `config.py` / env vars for shop GSTIN and phone to match your actual bill format.
-

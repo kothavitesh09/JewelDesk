@@ -297,6 +297,8 @@ def _serialize_bill(doc, include_items: bool = False):
         "customer_phone": doc.get("customer_phone"),
         "party_gst_no": doc.get("party_gst_no"),
         "payment_mode": doc.get("payment_mode", "cash"),
+        "cash_amount": round(float(doc.get("cash_amount", 0) or 0), 2),
+        "bank_amount": round(float(doc.get("bank_amount", 0) or 0), 2),
         "tax_type": doc.get("tax_type", "cgst_sgst"),
         "total": doc.get("total", 0),
         "cgst": doc.get("cgst", 0),
@@ -412,8 +414,8 @@ def _normalize_invoice_payload(data):
     customer_phone = _clean_text(data.get("customer_phone", ""), 30) or None
     party_gst_no = _clean_text(data.get("party_gst_no", ""), 30) or None
     payment_mode = str(data.get("payment_mode", "cash")).strip().lower()
-    if payment_mode not in {"cash", "bank"}:
-        raise ValueError("payment_mode must be either 'cash' or 'bank'.")
+    if payment_mode not in {"cash", "bank", "cash_bank"}:
+        raise ValueError("payment_mode must be 'cash', 'bank', or 'cash_bank'.")
 
     tax_type = str(data.get("tax_type", "cgst_sgst")).strip().lower()
     if tax_type not in {"cgst_sgst", "igst"}:
@@ -443,7 +445,6 @@ def _normalize_invoice_payload(data):
         value_addition = safe_float(it.get("value_addition"), 0.0)
         stone_amount = safe_float(it.get("stone_amount"), 0.0)
         invoice_amount = safe_float(it.get("amount"), None)
-
         if qty_gms is None or qty_gms <= 0:
             raise ValueError(f"Item #{i}: Weight (grams) must be > 0.")
         if invoice_amount is None or invoice_amount <= 0:
@@ -493,12 +494,30 @@ def _normalize_invoice_payload(data):
     igst = round(igst_total, 2)
     final_amount = round(total + cgst + sgst + igst, 2)
 
+    if payment_mode == "cash_bank":
+        cash_amount = safe_float(data.get("cash_amount"), None)
+        bank_amount = safe_float(data.get("bank_amount"), None)
+        if cash_amount is None or cash_amount <= 0:
+            raise ValueError("cash_amount must be greater than 0 for cash_bank payment mode.")
+        if bank_amount is None or bank_amount <= 0:
+            raise ValueError("bank_amount must be greater than 0 for cash_bank payment mode.")
+        if round(cash_amount + bank_amount, 2) != final_amount:
+            raise ValueError("cash_amount + bank_amount must equal the final invoice amount.")
+    elif payment_mode == "bank":
+        cash_amount = 0.0
+        bank_amount = final_amount
+    else:
+        cash_amount = final_amount
+        bank_amount = 0.0
+
     return {
         "customer_name": customer_name,
         "customer_address": customer_address,
         "customer_phone": customer_phone,
         "party_gst_no": party_gst_no,
         "payment_mode": payment_mode,
+        "cash_amount": round(cash_amount, 2),
+        "bank_amount": round(bank_amount, 2),
         "tax_type": tax_type,
         "items": normalized_items,
         "total": total,
@@ -1271,7 +1290,11 @@ def dashboard_data():
         items = bill.get("items", []) or []
         item_count = len(items) or 1
         payment_mode = str(bill.get("payment_mode", "cash")).lower()
-        payment[payment_mode if payment_mode in payment else "cash"] += float(bill.get("final_amount", 0) or 0)
+        if payment_mode == "cash_bank":
+            payment["cash"] += float(bill.get("cash_amount", 0) or 0)
+            payment["bank"] += float(bill.get("bank_amount", 0) or 0)
+        else:
+            payment[payment_mode if payment_mode in payment else "cash"] += float(bill.get("final_amount", 0) or 0)
 
         for item in items:
             particulars = str(item.get("particulars", "") or "")
