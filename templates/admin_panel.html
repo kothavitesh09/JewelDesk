@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel | JewelDesk{% endblock %}
+{% block content %}
+  <section class="reports-shell">
+    <div class="page-hero">
+      <div>
+        <span class="page-eyebrow">Admin Panel</span>
+        <h1 class="page-title">Pending Approvals</h1>
+        <p class="page-copy">Review new account requests, preview uploaded branding, and activate approved shops.</p>
+      </div>
+    </div>
+
+    {% if db_error %}<div class="alert alert-danger">{{ db_error }}</div>{% endif %}
+
+    <div class="admin-grid">
+      <div class="premium-card">
+        <h2 class="section-title mb-3">Pending Users</h2>
+        {% if pending_users %}
+          <div class="admin-list">
+            {% for user in pending_users %}
+              <article class="admin-user-card">
+                <div class="admin-user-card__header">
+                  <div>
+                    <strong>{{ user.shop_name }}</strong>
+                    <div>{{ user.owner_name }}</div>
+                    <div>{{ user.email }} | {{ user.phone }}</div>
+                    <div>GSTIN: {{ user.shop_gstin }}</div>
+                    <div>{{ user.shop_address }}</div>
+                  </div>
+                  <span class="section-badge">{{ user.status }}</span>
+                </div>
+                <div class="admin-preview-grid">
+                  <div>
+                    <div class="premium-label">Shop Logo</div>
+                    {% if user.logo_url %}<img src="{{ user.logo_url }}" class="image-preview image-preview--admin" alt="{{ user.shop_name }} logo" />{% endif %}
+                  </div>
+                  <div>
+                    <div class="premium-label">Shop Name Image</div>
+                    {% if user.shop_name_image_url %}<img src="{{ user.shop_name_image_url }}" class="image-preview image-preview--admin-wide" alt="{{ user.shop_name }} name image" />{% endif %}
+                  </div>
+                </div>
+                <div class="action-row">
+                  <form method="post" action="/admin/pending-users/{{ user.id }}/approve">
+                    <button type="submit" class="btn btn-premium-primary">Approve</button>
+                  </form>
+                  <form method="post" action="/admin/pending-users/{{ user.id }}/reject">
+                    <button type="submit" class="btn btn-premium-danger">Reject</button>
+                  </form>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="reports-empty-state" style="display:block;">No pending requests right now.</div>
+        {% endif %}
+      </div>
+
+      <div class="premium-card">
+        <h2 class="section-title mb-3">Active Shops</h2>
+        {% if active_users %}
+          <div class="admin-list admin-list--compact">
+            {% for user in active_users %}
+              <article class="admin-user-card admin-user-card--compact">
+                <strong>{{ user.shop_name }}</strong>
+                <div>{{ user.owner_name }}</div>
+                <div>{{ user.email }}</div>
+                <div>{{ user.shop_gstin }}</div>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="reports-empty-state" style="display:block;">No active shops yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+{% endblock %}

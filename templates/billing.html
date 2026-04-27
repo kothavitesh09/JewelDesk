@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="billing-shell">
+    <div class="page-hero page-hero--billing">
+      <div>
+        <span class="page-eyebrow">Invoice workspace</span>
+        <h1 class="page-title">Create Invoice</h1>
+        <p class="page-copy">A polished billing flow with live totals, faster edits, and cleaner visibility into every invoice.</p>
+      </div>
+      <div class="billing-hero-preview">
+        <div class="billing-hero-preview__label">Live total</div>
+        <div class="billing-hero-preview__value">Rs <span id="heroInvoiceTotalText">0.00</span></div>
+        <div class="billing-hero-preview__meta">
+          <span id="heroItemCount">1 item</span>
+          <span id="heroTaxType">CGST + SGST</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="billing-grid">
+      <div class="billing-left-column">
+        <div class="premium-card customer-card">
+          <div class="section-heading">
+            <div class="section-heading__icon">&#128100;</div>
+            <div>
+              <h2 class="section-title">Customer Details</h2>
+              <p class="section-subtitle">Capture customer info, payment mode, and tax setup before generating the invoice.</p>
+            </div>
+          </div>
+
+          <div class="field-stack">
+            <div class="mb-3">
+              <label class="form-label premium-label" for="invoiceNoInput">Invoice No (optional)</label>
+              <input
+                type="text"
+                id="invoiceNoInput"
+                class="form-control premium-input"
+                placeholder="Leave blank to auto-assign"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label premium-label" for="invoiceDateInput">Date</label>
+              <input
+                type="date"
+                id="invoiceDateInput"
+                class="form-control premium-input"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label premium-label" for="customerName">Customer Name</label>
+              <input
+                type="text"
+                id="customerName"
+                class="form-control premium-input"
+                placeholder="Enter customer name"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label premium-label" for="customerAddress">Address (optional)</label>
+              <textarea
+                id="customerAddress"
+                class="form-control premium-input premium-textarea"
+                rows="2"
+                placeholder="Enter customer address"
+              ></textarea>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label premium-label" for="customerPhone">Phone (optional)</label>
+              <input
+                type="text"
+                id="customerPhone"
+                class="form-control premium-input"
+                placeholder="Enter phone number"
+              />
+            </div>
+
+            <div class="mb-4">
+              <label class="form-label premium-label" for="partyGstNo">GST Number (optional)</label>
+              <input
+                type="text"
+                id="partyGstNo"
+                class="form-control premium-input"
+                placeholder="Enter GSTIN if available"
+              />
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label premium-label d-block">Mode of Payment</label>
+            <div class="tax-pill-group" id="paymentModeGroup">
+              <label class="tax-pill" for="paymentModeCash">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="paymentModeCash"
+                  checked
+                />
+                <span>Cash</span>
+              </label>
+              <label class="tax-pill tax-pill--light" for="paymentModeBank">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="paymentModeBank"
+                />
+                <span>Bank</span>
+              </label>
+              <label class="tax-pill tax-pill--light" for="paymentModeCashBank">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="paymentModeCashBank"
+                />
+                <span>Cash + Bank</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="mb-4" id="splitPaymentFields" style="display:none;">
+            <div class="split-payment-grid">
+              <div>
+                <label class="form-label premium-label" for="cashAmountInput">Amt in Cash</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  id="cashAmountInput"
+                  class="form-control premium-input"
+                  placeholder="Enter cash amount"
+                />
+              </div>
+              <div>
+                <label class="form-label premium-label" for="bankAmountInput">Amt in Bank</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  id="bankAmountInput"
+                  class="form-control premium-input"
+                  placeholder="Enter bank amount"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label premium-label d-block">Tax Type</label>
+            <div class="tax-pill-group">
+              <label class="tax-pill" for="taxTypeCgstSgst">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="taxTypeCgstSgst"
+                  checked
+                />
+                <span>CGST + SGST</span>
+              </label>
+              <label class="tax-pill tax-pill--light" for="taxTypeIgst">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="taxTypeIgst"
+                />
+                <span>IGST</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="action-row">
+            <button class="btn btn-premium-secondary" id="addItemBtn" type="button">+ Add Item</button>
+            <button class="btn btn-premium-primary" id="generateBillBtn" type="button">Generate Bill</button>
+            <button class="btn btn-premium-accent" id="editBillBtn" type="button" disabled>Edit Invoice</button>
+            <button class="btn btn-premium-primary" id="updateBillBtn" type="button" style="display:none;">Update</button>
+            <button class="btn btn-premium-secondary" id="cancelEditBtn" type="button" style="display:none;">Cancel</button>
+            <button class="btn btn-premium-secondary" id="downloadPdfBtn" type="button" disabled>Download PDF</button>
+            <button class="btn btn-premium-secondary" id="printBillBtn" type="button" disabled>Print Bill</button>
+          </div>
+        </div>
+
+        <div class="premium-card invoice-preview-card">
+          <div class="section-heading section-heading--compact">
+            <div>
+              <h2 class="section-title">Calculation Preview</h2>
+              <p class="section-subtitle">Review taxes and total before saving.</p>
+            </div>
+          </div>
+          <div class="preview-metrics">
+            <div class="preview-metric">
+              <span class="preview-metric__label">Taxable Amount</span>
+              <strong class="preview-metric__value">Rs <span id="previewTaxableAmount">0.00</span></strong>
+            </div>
+            <div class="preview-metric">
+              <span class="preview-metric__label">GST</span>
+              <strong class="preview-metric__value">Rs <span id="previewGstAmount">0.00</span></strong>
+            </div>
+            <div class="preview-metric">
+              <span class="preview-metric__label">Grand Total</span>
+              <strong class="preview-metric__value preview-metric__value--accent">Rs <span id="previewGrandTotal">0.00</span></strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="billing-right-column">
+        <div class="premium-card items-card">
+          <div class="section-heading section-heading--compact">
+            <div>
+              <h2 class="section-title">Invoice Items</h2>
+              <p class="section-subtitle">Add line items with item type, weights, rate, stone amount, and final net amount.</p>
+            </div>
+            <span class="section-badge" id="itemCountBadge">1 item</span>
+          </div>
+
+          <div class="table-responsive premium-table-wrap">
+            <table class="table premium-table align-middle" id="itemsTable">
+              <thead>
+                <tr>
+                  <th style="width: 82px; text-align: center;">S. No</th>
+                  <th style="min-width: 210px;">Description</th>
+                  <th style="width: 120px;">Type</th>
+                  <th style="width: 96px;">Qty</th>
+                  <th style="width: 112px;">GR WT</th>
+                  <th style="width: 112px;">ST. WT</th>
+                  <th style="width: 112px;">NET WT</th>
+                  <th style="width: 96px;">VA.</th>
+                  <th style="width: 112px;">Rate</th>
+                  <th style="width: 112px;">ST AMT</th>
+                  <th style="width: 150px;">NET AMT (Rs.)</th>
+                  <th style="width: 68px; text-align: center;"> </th>
+                </tr>
+              </thead>
+              <tbody id="itemsTbody"></tbody>
+            </table>
+          </div>
+          <div class="table-empty-state" id="itemsEmptyState">No items yet. Add your first item to start building the invoice.</div>
+        </div>
+
+        <div class="premium-card summary-card">
+          <div class="section-heading section-heading--compact section-heading--summary">
+            <div>
+              <h2 class="section-title">Bill Summary</h2>
+              <p class="section-subtitle">A cleaner breakdown of invoice value, taxes, and final payable amount.</p>
+            </div>
+          </div>
+
+          <div class="summary-panel">
+            <div class="summary-row summary-row--invoice">
+              <span class="summary-label">Invoice No</span>
+              <span class="summary-value" id="invoiceNoText">Not generated</span>
+            </div>
+
+            <div class="summary-divider"></div>
+
+            <div class="summary-grid">
+              <div class="summary-row">
+                <span class="summary-label">Total</span>
+                <span class="summary-value">Rs <span id="totalText">0.00</span></span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">CGST (1.5%)</span>
+                <span class="summary-value">Rs <span id="cgstText">0.00</span></span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">SGST (1.5%)</span>
+                <span class="summary-value">Rs <span id="sgstText">0.00</span></span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">IGST (3%)</span>
+                <span class="summary-value">Rs <span id="igstText">0.00</span></span>
+              </div>
+            </div>
+
+            <div class="summary-divider"></div>
+
+            <div class="summary-row summary-row--total">
+              <span class="summary-label">Invoice Total</span>
+              <span class="summary-value">Rs <span id="invoiceTotalText">0.00</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    window.__BILLING_INIT__ = { empty: true };
+  </script>
+  <script src="{{ url_for('static', filename='js/billing.js', v='20260427c') }}"></script>
+{% endblock %}
