@@ -266,6 +266,62 @@ def _serialize_inventory_item(doc):
     }
 
 
+def _inventory_weight_balances(user_id: str):
+    balances = defaultdict(float)
+    item_types_by_name = defaultdict(set)
+
+    inventory_docs = inventory_collection.find(
+        {"user_id": user_id},
+        projection={"item_name": 1, "metal_type": 1},
+    )
+    for item in inventory_docs:
+        item_name = str(item.get("item_name", "") or "").strip().casefold()
+        if item_name:
+            item_types_by_name[item_name].add(_normalize_metal_type(item.get("metal_type", "Gold")))
+
+    purchase_docs = purchases_collection.find(
+        {"user_id": user_id},
+        projection={"items.item_name": 1, "items.metal_type": 1, "items.weight": 1, "items.qty_gms": 1},
+    )
+    for purchase in purchase_docs:
+        for item in purchase.get("items", []) or []:
+            key = _inventory_lookup_key(item.get("item_name", ""), item.get("metal_type", "Gold"))
+            balances[key] += float(item.get("weight", 0) or item.get("qty_gms", 0) or 0)
+
+    bill_docs = bills_collection.find(
+        {"user_id": user_id},
+        projection={
+            "items.particulars": 1,
+            "items.item_name": 1,
+            "items.item_type": 1,
+            "items.metal_type": 1,
+            "items.qty_gms": 1,
+            "items.weight": 1,
+            "items.net_weight": 1,
+            "items.qty": 1,
+        },
+    )
+    for bill in bill_docs:
+        for item in bill.get("items", []) or []:
+            item_name = item.get("particulars") or item.get("item_name") or ""
+            metal_type = item.get("item_type") or item.get("metal_type")
+            if not metal_type:
+                matching_types = item_types_by_name.get(str(item_name or "").strip().casefold(), set())
+                if len(matching_types) == 1:
+                    metal_type = next(iter(matching_types))
+            key = _inventory_lookup_key(item_name, metal_type or "Gold")
+            balances[key] -= float(item.get("qty_gms", 0) or item.get("weight", 0) or item.get("net_weight", 0) or item.get("qty", 0) or 0)
+
+    return balances
+
+
+def _inventory_doc_with_balance(doc, balances):
+    item = dict(doc)
+    key = _inventory_lookup_key(item.get("item_name", ""), item.get("metal_type", "Gold"))
+    item["available_weight"] = round(balances.get(key, 0.0), 3)
+    return item
+
+
 def _serialize_purchase(doc):
     return {
         "id": doc.get("public_id"),
@@ -421,6 +477,19 @@ def _normalize_invoice_payload(data):
     if tax_type not in {"cgst_sgst", "igst"}:
         raise ValueError("tax_type must be either 'cgst_sgst' or 'igst'.")
 
+    invoice_created_at = utcnow()
+    invoice_date_raw = str(data.get("invoice_date", "") or "").strip()
+    if invoice_date_raw:
+        try:
+            selected_date = datetime.strptime(invoice_date_raw, "%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError("Date must be in YYYY-MM-DD format.") from exc
+        invoice_created_at = invoice_created_at.replace(
+            year=selected_date.year,
+            month=selected_date.month,
+            day=selected_date.day,
+        )
+
     items = data.get("items", [])
     if not isinstance(items, list) or not items:
         raise ValueError("At least one item is required.")
@@ -444,6 +513,7 @@ def _normalize_invoice_payload(data):
         qty_gms = safe_float(it.get("qty_gms"), None)
         value_addition = safe_float(it.get("value_addition"), 0.0)
         stone_amount = safe_float(it.get("stone_amount"), 0.0)
+        rate_per_g = safe_float(it.get("rate_per_g"), None)
         invoice_amount = safe_float(it.get("amount"), None)
         if qty_gms is None or qty_gms <= 0:
             raise ValueError(f"Item #{i}: Weight (grams) must be > 0.")
@@ -464,7 +534,6 @@ def _normalize_invoice_payload(data):
             igst_item = 0.0
             taxable_amount = round(float(invoice_amount) - cgst_item - sgst_item, 2)
 
-        rate_per_g = round(float(taxable_amount) / float(qty_gms), 2)
         total += taxable_amount
         cgst_total += cgst_item
         sgst_total += sgst_item
@@ -480,7 +549,7 @@ def _normalize_invoice_payload(data):
                 "stone_weight": round(stone_weight, 3),
                 "qty_gms": round(qty_gms, 3),
                 "value_addition": round(value_addition, 3),
-                "rate_per_g": round(rate_per_g, 2),
+                "rate_per_g": round(rate_per_g, 2) if rate_per_g is not None else None,
                 "amount": taxable_amount,
                 "stone_amount": round(stone_amount, 2),
                 "invoice_amount": round(float(invoice_amount), 2),
@@ -515,6 +584,7 @@ def _normalize_invoice_payload(data):
         "customer_address": customer_address,
         "customer_phone": customer_phone,
         "party_gst_no": party_gst_no,
+        "created_at": invoice_created_at,
         "payment_mode": payment_mode,
         "cash_amount": round(cash_amount, 2),
         "bank_amount": round(bank_amount, 2),
@@ -920,14 +990,16 @@ def list_inventory_items():
 
     search = _clean_text(request.args.get("search", ""), 160)
     metal_type = _normalize_metal_type(request.args.get("type", ""), default="")
-    query = {"user_id": _current_user_id()}
+    user_id = _current_user_id()
+    query = {"user_id": user_id}
     if search:
         query["item_name"] = {"$regex": re.escape(search), "$options": "i"}
     if metal_type in VALID_METAL_TYPES:
         query["metal_type"] = metal_type
 
+    balances = _inventory_weight_balances(user_id)
     docs = inventory_collection.find(query).sort([("metal_type", 1), ("item_name", 1)])
-    return jsonify({"items": [_serialize_inventory_item(doc) for doc in docs]})
+    return jsonify({"items": [_serialize_inventory_item(_inventory_doc_with_balance(doc, balances)) for doc in docs]})
 
 
 @app.post("/inventory-items")
@@ -1259,6 +1331,7 @@ def dashboard_data():
     bills = list(bills_collection.find(bill_query).sort("created_at", -1).limit(500))
     purchases = list(purchases_collection.find(purchase_query).sort("created_at", -1).limit(100))
     inventory = list(inventory_collection.find({"user_id": user_id}))
+    inventory_balances = _inventory_weight_balances(user_id)
 
     today = datetime.now().date()
     yesterday = today - timedelta(days=1)
@@ -1325,11 +1398,15 @@ def dashboard_data():
         for key in ("qty", "taxable", "cgst", "sgst", "igst", "total"):
             total_row[key] += row[key]
 
+    inventory_by_type = {metal_type: 0.0 for metal_type in ("Gold", "Gold Pure", "Silver", "Silver Pure")}
     inventory_rows = []
     low_stock_alerts = []
     total_stock_weight = 0.0
     for item in inventory:
-        available = float(item.get("available_weight", 0) or 0)
+        balanced_item = _inventory_doc_with_balance(item, inventory_balances)
+        available = float(balanced_item.get("available_weight", 0) or 0)
+        metal_type = _normalize_metal_type(item.get("metal_type", "Gold"))
+        inventory_by_type[metal_type] += available
         threshold = float(item.get("reorder_threshold", 0) or 0)
         total_stock_weight += available
         status = "Normal"
@@ -1347,6 +1424,10 @@ def dashboard_data():
         if status != "Normal":
             low_stock_alerts.append(inventory_row)
 
+    inventory_summary_rows = [
+        {"metal_type": metal_type, "available_weight": round(inventory_by_type[metal_type], 3)}
+        for metal_type in ("Gold", "Gold Pure", "Silver", "Silver Pure")
+    ]
     inventory_rows.sort(key=lambda row: row["available_weight"])
     low_stock_alerts.sort(key=lambda row: row["available_weight"])
 
@@ -1382,7 +1463,7 @@ def dashboard_data():
                 "total": round(payment["cash"] + payment["bank"], 2),
             },
             "top_selling_items": sorted(top_items.values(), key=lambda item: item["revenue"], reverse=True)[:5],
-            "inventory_snapshot": inventory_rows[:8],
+            "inventory_snapshot": inventory_summary_rows,
             "recent_sales": [{"id": bill.get("invoice_no_text") or bill.get("invoice_no"), "name": bill.get("customer_name") or "Walk-in Customer", "amount": round(float(bill.get("final_amount", 0) or 0), 2)} for bill in bills[:5]],
             "recent_purchases": [{"id": str(purchase.get("purchase_no") or purchase.get("public_id")), "name": purchase.get("supplier_name") or "Supplier", "amount": round(float(purchase.get("total_amount", 0) or 0), 2)} for purchase in purchases[:5]],
             "low_stock_alerts": low_stock_alerts[:6],

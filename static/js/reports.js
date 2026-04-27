@@ -145,9 +145,8 @@ function renderInventory(items) {
     .map(
       (item) => `
         <tr>
-          <td>${escapeHtml(item.item_name)}</td>
+          <td>${escapeHtml(item.metal_type)}</td>
           <td class="text-end">${formatWeight(item.available_weight)} g</td>
-          <td class="text-end">${escapeHtml(item.status)}</td>
         </tr>
       `
     )

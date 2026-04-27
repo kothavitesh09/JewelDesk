@@ -311,8 +311,8 @@ def _split_shop_address(address: str) -> List[str]:
     parts = [part.strip() for part in str(address or "").replace("\r", "\n").split("\n") if part.strip()]
     if len(parts) == 1:
         parts = [part.strip() for part in str(address or "").split(",") if part.strip()]
-    lines = parts[:3]
-    while len(lines) < 3:
+    lines = parts[:4]
+    while len(lines) < 4:
         lines.append("")
     return lines
 
@@ -332,12 +332,13 @@ def _dynamic_cell_values(
     shop_address_lines = _split_shop_address(_shop_value(shop_overrides, invoice, "shop_address", SHOP_ADDRESS))
 
     dynamic: Dict[str, str] = {
-        "I1": f"GSTIN: {_shop_value(shop_overrides, invoice, 'shop_gstin', SHOP_GSTIN)}",
-        "I2": shop_address_lines[0],
-        "I3": shop_address_lines[1],
-        "I4": shop_address_lines[2],
-        "I5": f"Call: {_shop_value(shop_overrides, invoice, 'shop_phone', SHOP_PHONE)}",
+        "I1": shop_address_lines[0],
+        "I2": shop_address_lines[1],
+        "I3": shop_address_lines[2],
+        "I4": shop_address_lines[3],
+        "I5": f"Phone No: {_shop_value(shop_overrides, invoice, 'shop_phone', SHOP_PHONE)}",
         "A6": f"Name: {str(invoice.get('customer_name') or '').strip()}",
+        "I6": f"GSTIN: {_shop_value(shop_overrides, invoice, 'shop_gstin', SHOP_GSTIN)}",
         "A7": f"Address: {str(invoice.get('customer_address') or '').strip()}",
         "A8": f"Phone: {str(invoice.get('customer_phone') or '').strip()}",
         "A9": f"GSTIN No: {str(invoice.get('party_gst_no') or '').strip()}",

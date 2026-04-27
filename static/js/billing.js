@@ -79,6 +79,26 @@ function setValueIfPresent(id, value) {
   }
 }
 
+function formatDateInputValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
+
+function todayDateInputValue() {
+  const today = new Date();
+  today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+  return today.toISOString().slice(0, 10);
+}
+
+function ensureInvoiceDate() {
+  const input = document.getElementById("invoiceDateInput");
+  if (input && !input.value) {
+    input.value = todayDateInputValue();
+  }
+}
+
 function updateBillingMeta(summary = {}) {
   const rows = Array.from(document.querySelectorAll("#itemsTbody tr"));
   const itemCount = rows.length;
@@ -147,34 +167,23 @@ function setTaxType(taxType) {
 }
 
 function recalcItemRow(tr) {
-  const quantityValue = Number(tr.querySelector(".item-quantity").value);
   const grossWeight = Number(tr.querySelector(".item-gross-weight").value);
   const stoneWeight = Number(tr.querySelector(".item-stone-weight").value);
   const netWeightInput = tr.querySelector(".item-net-weight");
   const netWeightValue = Number(netWeightInput.value);
-  const valueAddition = Number(tr.querySelector(".item-value-addition").value);
-  const rateInput = tr.querySelector(".item-rate-input");
-  const stoneAmount = Number(tr.querySelector(".item-stone-amount").value);
   const netAmountInput = tr.querySelector(".item-net-amount");
   const netAmountValue = Number(netAmountInput.value);
 
-  const safeQuantity = isFinite(quantityValue) ? quantityValue : 0;
   const safeGrossWeight = isFinite(grossWeight) ? grossWeight : 0;
   const safeStoneWeight = isFinite(stoneWeight) ? stoneWeight : 0;
   const derivedNetWeight = Math.max(safeGrossWeight - safeStoneWeight, 0);
   const safeNetWeight = isFinite(netWeightValue) && netWeightValue > 0 ? netWeightValue : derivedNetWeight;
-  const safeValueAddition = isFinite(valueAddition) ? valueAddition : 0;
-  const safeStoneAmount = isFinite(stoneAmount) ? stoneAmount : 0;
-
   const safeNetAmount = isFinite(netAmountValue) ? netAmountValue : 0;
-  const computedRate = safeQuantity > 0 && safeNetWeight > 0
-    ? (safeNetAmount / safeNetWeight) / safeQuantity
-    : 0;
+  const manualRate = Number(tr.querySelector(".item-rate-input").value);
 
   if (document.activeElement !== netWeightInput) {
     netWeightInput.value = safeNetWeight > 0 ? money3(safeNetWeight) : "";
   }
-  rateInput.value = computedRate > 0 ? money2(computedRate) : "";
 
   const invoiceAmount = safeNetAmount;
   let taxableAmount = 0;
@@ -186,7 +195,7 @@ function recalcItemRow(tr) {
     invoiceAmount: isFinite(invoiceAmount) ? invoiceAmount : 0,
     taxableAmount,
     netWeight: safeNetWeight,
-    rate: computedRate,
+    rate: isFinite(manualRate) ? manualRate : 0,
   };
 }
 
@@ -266,7 +275,7 @@ function bindRowEvents(tr) {
     recalcTotals();
   });
 
-  tr.querySelectorAll(".item-quantity, .item-gross-weight, .item-stone-weight, .item-value-addition, .item-stone-amount, .item-net-amount, .item-net-weight, .item-type, .item-particulars").forEach((input) => {
+  tr.querySelectorAll(".item-quantity, .item-gross-weight, .item-stone-weight, .item-value-addition, .item-rate-input, .item-stone-amount, .item-net-amount, .item-net-weight, .item-type, .item-particulars").forEach((input) => {
     input.addEventListener("input", () => {
       recalcItemRow(tr);
       recalcTotals();
@@ -330,7 +339,7 @@ function addItemRow(item = {}, options = {}) {
       <input type="number" min="0" step="0.001" class="form-control form-control-sm item-value-addition" placeholder="0.000" value="${valueAddition}" />
     </td>
     <td class="align-middle" data-label="Rate">
-      <input type="number" min="0" step="0.01" class="form-control form-control-sm item-rate-input" placeholder="0.00" value="${ratePerG}" readonly />
+      <input type="number" min="0" step="0.01" class="form-control form-control-sm item-rate-input" placeholder="0.00" value="${ratePerG}" />
     </td>
     <td class="align-middle" data-label="ST AMT">
       <input type="number" min="0" step="0.01" class="form-control form-control-sm item-stone-amount" placeholder="0.00" value="${stoneAmount}" />
@@ -370,8 +379,13 @@ function getValidatedPayload() {
   const customerAddress = document.getElementById("customerAddress").value.trim();
   const customerPhone = document.getElementById("customerPhone").value.trim();
   const partyGstNo = document.getElementById("partyGstNo").value.trim();
+  const invoiceDate = document.getElementById("invoiceDateInput").value;
   const rows = readItemsFromDOM();
   const filtered = [];
+
+  if (!invoiceDate) {
+    throw new Error("Date is required.");
+  }
 
   for (const r of rows) {
     const hasAnyField =
@@ -425,6 +439,7 @@ function getValidatedPayload() {
     customer_address: customerAddress || "",
     customer_phone: customerPhone || "",
     party_gst_no: partyGstNo || "",
+    invoice_date: invoiceDate,
     payment_mode: paymentMode,
     cash_amount: cashAmount,
     bank_amount: bankAmount,
@@ -558,6 +573,7 @@ function disableEditMode() {
 async function loadBillIntoForm(invoiceNo, options = {}) {
   const bill = typeof invoiceNo === "object" && invoiceNo !== null ? invoiceNo : await fetchBill(invoiceNo);
   document.getElementById("invoiceNoInput").value = bill.invoice_no_text || bill.invoice_no;
+  setValueIfPresent("invoiceDateInput", formatDateInputValue(bill.date) || todayDateInputValue());
   document.getElementById("customerName").value = bill.customer_name || "";
   setValueIfPresent("customerAddress", bill.customer_address || "");
   setValueIfPresent("customerPhone", bill.customer_phone || "");
@@ -787,6 +803,7 @@ function wireActions() {
 async function init() {
   await loadInventoryOptions();
   wireActions();
+  ensureInvoiceDate();
   addItemRow();
   recalcTotals();
   disableEditMode();
