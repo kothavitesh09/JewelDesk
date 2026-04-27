@@ -514,7 +514,12 @@ def _normalize_invoice_payload(data):
         value_addition = safe_float(it.get("value_addition"), 0.0)
         stone_amount = safe_float(it.get("stone_amount"), 0.0)
         rate_per_g = safe_float(it.get("rate_per_g"), None)
-        invoice_amount = safe_float(it.get("amount"), None)
+        submitted_invoice_amount = safe_float(it.get("amount"), None)
+        invoice_amount = (
+            round(((float(qty_gms or 0) + float(value_addition or 0)) * float(rate_per_g or 0)) + float(stone_amount or 0), 2)
+            if rate_per_g is not None
+            else submitted_invoice_amount
+        )
         if qty_gms is None or qty_gms <= 0:
             raise ValueError(f"Item #{i}: Weight (grams) must be > 0.")
         if invoice_amount is None or invoice_amount <= 0:
@@ -522,17 +527,15 @@ def _normalize_invoice_payload(data):
         if item_type not in VALID_METAL_TYPES:
             raise ValueError(f"Item #{i}: Type must be Gold, Gold Pure, Silver, or Silver Pure.")
 
-        raw_total = float(invoice_amount) / 1.03
+        taxable_amount = round(float(invoice_amount), 2)
         if tax_type == "igst":
-            igst_item = round(raw_total * 0.03, 2)
+            igst_item = round(taxable_amount * 0.03, 2)
             cgst_item = 0.0
             sgst_item = 0.0
-            taxable_amount = round(float(invoice_amount) - igst_item, 2)
         else:
-            cgst_item = round(raw_total * 0.015, 2)
-            sgst_item = round(raw_total * 0.015, 2)
+            cgst_item = round(taxable_amount * 0.015, 2)
+            sgst_item = round(taxable_amount * 0.015, 2)
             igst_item = 0.0
-            taxable_amount = round(float(invoice_amount) - cgst_item - sgst_item, 2)
 
         total += taxable_amount
         cgst_total += cgst_item

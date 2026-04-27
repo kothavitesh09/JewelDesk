@@ -171,21 +171,27 @@ function recalcItemRow(tr) {
   const stoneWeight = Number(tr.querySelector(".item-stone-weight").value);
   const netWeightInput = tr.querySelector(".item-net-weight");
   const netWeightValue = Number(netWeightInput.value);
+  const valueAddition = Number(tr.querySelector(".item-value-addition").value);
+  const rate = Number(tr.querySelector(".item-rate-input").value);
+  const stoneAmount = Number(tr.querySelector(".item-stone-amount").value);
   const netAmountInput = tr.querySelector(".item-net-amount");
-  const netAmountValue = Number(netAmountInput.value);
 
   const safeGrossWeight = isFinite(grossWeight) ? grossWeight : 0;
   const safeStoneWeight = isFinite(stoneWeight) ? stoneWeight : 0;
   const derivedNetWeight = Math.max(safeGrossWeight - safeStoneWeight, 0);
   const safeNetWeight = isFinite(netWeightValue) && netWeightValue > 0 ? netWeightValue : derivedNetWeight;
-  const safeNetAmount = isFinite(netAmountValue) ? netAmountValue : 0;
-  const manualRate = Number(tr.querySelector(".item-rate-input").value);
+  const safeValueAddition = isFinite(valueAddition) ? valueAddition : 0;
+  const safeRate = isFinite(rate) ? rate : 0;
+  const safeStoneAmount = isFinite(stoneAmount) ? stoneAmount : 0;
+  const computedNetAmount = Math.round((((safeNetWeight + safeValueAddition) * safeRate) + safeStoneAmount) * 100) / 100;
 
   if (document.activeElement !== netWeightInput) {
     netWeightInput.value = safeNetWeight > 0 ? money3(safeNetWeight) : "";
   }
 
-  const invoiceAmount = safeNetAmount;
+  netAmountInput.value = computedNetAmount > 0 ? money2(computedNetAmount) : "";
+
+  const invoiceAmount = computedNetAmount;
   let taxableAmount = 0;
   if (isFinite(invoiceAmount) && invoiceAmount > 0) {
     taxableAmount = invoiceAmount / 1.03;
@@ -195,7 +201,7 @@ function recalcItemRow(tr) {
     invoiceAmount: isFinite(invoiceAmount) ? invoiceAmount : 0,
     taxableAmount,
     netWeight: safeNetWeight,
-    rate: isFinite(manualRate) ? manualRate : 0,
+    rate: safeRate,
   };
 }
 
@@ -241,18 +247,14 @@ function recalcTotals() {
   let igst = 0;
   let finalAmount = 0;
 
+  total = invoiceTotal;
   if (taxType === "igst") {
-    const rawTotal = invoiceTotal / 1.03;
-    igst = Math.round(rawTotal * 0.03 * 100) / 100;
-    total = Math.round((invoiceTotal - igst) * 100) / 100;
-    finalAmount = Math.round(invoiceTotal * 100) / 100;
+    igst = Math.round(total * 0.03 * 100) / 100;
   } else {
-    const rawTotal = invoiceTotal / 1.03;
-    cgst = Math.round(rawTotal * 0.015 * 100) / 100;
-    sgst = Math.round(rawTotal * 0.015 * 100) / 100;
-    total = Math.round((invoiceTotal - cgst - sgst) * 100) / 100;
-    finalAmount = Math.round(invoiceTotal * 100) / 100;
+    cgst = Math.round(total * 0.015 * 100) / 100;
+    sgst = Math.round(total * 0.015 * 100) / 100;
   }
+  finalAmount = Math.round((total + cgst + sgst + igst) * 100) / 100;
 
   document.getElementById("totalText").textContent = money2(total);
   document.getElementById("cgstText").textContent = money2(cgst);
@@ -345,7 +347,7 @@ function addItemRow(item = {}, options = {}) {
       <input type="number" min="0" step="0.01" class="form-control form-control-sm item-stone-amount" placeholder="0.00" value="${stoneAmount}" />
     </td>
     <td class="align-middle" data-label="NET AMT (Rs.)">
-      <input type="number" min="0" step="0.01" class="form-control form-control-sm item-net-amount" placeholder="0.00" value="${invoiceAmount === "" ? "" : Number(invoiceAmount)}" />
+      <input type="number" min="0" step="0.01" class="form-control form-control-sm item-net-amount" placeholder="0.00" value="${invoiceAmount === "" ? "" : Number(invoiceAmount)}" readonly />
     </td>
     <td class="text-center align-middle" data-label="Action">
       <button type="button" class="btn btn-sm btn-outline-danger removeItemBtn" aria-label="Remove item">&#128465;</button>
