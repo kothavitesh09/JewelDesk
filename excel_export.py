@@ -23,6 +23,9 @@ EXCEL_HEADERS = [
     "IGST Amount",
     "Total Amount",
     "Mode of Payment",
+    "Amt in Cash",
+    "Amt in Bank",
+    "Discount",
 ]
 
 
@@ -56,6 +59,9 @@ def _build_row(
     party_gst_no: str,
     customer_name: str,
     payment_mode: str,
+    cash_amount: Any = "",
+    bank_amount: Any = "",
+    discount: Any = "",
     item: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     item = item or {}
@@ -94,6 +100,9 @@ def _build_row(
         "IGST Amount": igst_amount,
         "Total Amount": total_amount,
         "Mode of Payment": "Cash + Bank" if payment_mode == "cash_bank" else (payment_mode.title() if payment_mode else ""),
+        "Amt in Cash": cash_amount if payment_mode == "cash_bank" else "",
+        "Amt in Bank": bank_amount if payment_mode == "cash_bank" else "",
+        "Discount": discount,
     }
 
 
@@ -112,6 +121,9 @@ def export_bills_to_excel_bytes(from_date: Optional[str], to_date: Optional[str]
                 "customer_name": 1,
                 "party_gst_no": 1,
                 "payment_mode": 1,
+                "cash_amount": 1,
+                "bank_amount": 1,
+                "discount": 1,
                 "items": 1,
             },
         )
@@ -133,6 +145,9 @@ def export_bills_to_excel_bytes(from_date: Optional[str], to_date: Optional[str]
         party_gst_no = (bill.get("party_gst_no") or "").strip()
         customer_name = bill.get("customer_name") or ""
         payment_mode = str(bill.get("payment_mode") or "").strip()
+        cash_amount = bill.get("cash_amount", "")
+        bank_amount = bill.get("bank_amount", "")
+        discount = bill.get("discount", 0)
 
         if invoice_no_text is None or created_at is None:
             continue
@@ -141,11 +156,11 @@ def export_bills_to_excel_bytes(from_date: Optional[str], to_date: Optional[str]
         items = bill.get("items", []) or []
 
         if not items:
-            rows.append(_build_row(invoice_no_text, date_str, party_gst_no, customer_name, payment_mode))
+            rows.append(_build_row(invoice_no_text, date_str, party_gst_no, customer_name, payment_mode, cash_amount, bank_amount, discount))
             continue
 
         for item in items:
-            rows.append(_build_row(invoice_no_text, date_str, party_gst_no, customer_name, payment_mode, item))
+            rows.append(_build_row(invoice_no_text, date_str, party_gst_no, customer_name, payment_mode, cash_amount, bank_amount, discount, item))
 
     df = pd.DataFrame(rows, columns=EXCEL_HEADERS)
 

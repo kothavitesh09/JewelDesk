@@ -842,6 +842,42 @@ main.container {
   padding: 0;
 }
 
+.discount-card {
+  padding: 1rem 1.15rem;
+}
+
+.discount-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.45fr);
+  gap: 1rem;
+  align-items: end;
+}
+
+.discount-control .section-subtitle {
+  margin: 0;
+}
+
+.discount-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding-left: 0.8rem;
+  border-radius: 14px;
+  background: rgba(245, 247, 251, 0.86);
+  border: 1px solid rgba(92, 109, 140, 0.14);
+}
+
+.discount-input-wrap span {
+  color: #455064;
+  font-weight: 800;
+}
+
+.discount-input-wrap .premium-input {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .summary-card {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 249, 255, 0.92)),
@@ -2848,8 +2884,13 @@ main.container {
   .purchase-item-row,
   .recent-transactions--split,
   .quick-actions--inline,
+  .discount-control,
   .dashboard-shop-header {
     grid-template-columns: 1fr;
+  }
+
+  .discount-input-wrap {
+    width: 100%;
   }
 
   .billing-hero-preview {
