@@ -239,6 +239,26 @@
           <div class="table-empty-state" id="itemsEmptyState">No items yet. Add your first item to start building the invoice.</div>
         </div>
 
+        <div class="premium-card discount-card">
+          <div class="discount-control">
+            <div>
+              <label class="form-label premium-label" for="discountInput">Discount</label>
+              <p class="section-subtitle">Enter invoice-level discount amount.</p>
+            </div>
+            <div class="discount-input-wrap">
+              <span>Rs</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                id="discountInput"
+                class="form-control premium-input"
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+        </div>
+
         <div class="premium-card summary-card">
           <div class="section-heading section-heading--compact section-heading--summary">
             <div>
@@ -259,6 +279,10 @@
               <div class="summary-row">
                 <span class="summary-label">Total</span>
                 <span class="summary-value">Rs <span id="totalText">0.00</span></span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">Discount</span>
+                <span class="summary-value">Rs <span id="discountText">0.00</span></span>
               </div>
               <div class="summary-row">
                 <span class="summary-label">CGST (1.5%)</span>
@@ -289,5 +313,5 @@
   <script>
     window.__BILLING_INIT__ = { empty: true };
   </script>
-  <script src="{{ url_for('static', filename='js/billing.js', v='20260427c') }}"></script>
+  <script src="{{ url_for('static', filename='js/billing.js', v='20260507a') }}"></script>
 {% endblock %}

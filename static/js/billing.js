@@ -118,7 +118,7 @@ function updateBillingMeta(summary = {}) {
   if (heroItemCount) heroItemCount.textContent = itemLabel;
   if (heroTaxType) heroTaxType.textContent = taxType;
   if (heroInvoiceTotalText) heroInvoiceTotalText.textContent = money2(summary.finalAmount || 0);
-  if (previewTaxableAmount) previewTaxableAmount.textContent = money2(summary.total || 0);
+  if (previewTaxableAmount) previewTaxableAmount.textContent = money2(Math.max((summary.total || 0) - (summary.discount || 0), 0));
   if (previewGstAmount) previewGstAmount.textContent = money2((summary.cgst || 0) + (summary.sgst || 0) + (summary.igst || 0));
   if (previewGrandTotal) previewGrandTotal.textContent = money2(summary.finalAmount || 0);
   if (itemsEmptyState) itemsEmptyState.style.display = itemCount ? "none" : "block";
@@ -164,6 +164,12 @@ function setTaxType(taxType) {
   const normalized = taxType === "igst" ? "igst" : "cgst_sgst";
   document.getElementById("taxTypeCgstSgst").checked = normalized === "cgst_sgst";
   document.getElementById("taxTypeIgst").checked = normalized === "igst";
+}
+
+function getDiscountValue() {
+  const input = document.getElementById("discountInput");
+  const discount = Number(input?.value || 0);
+  return isFinite(discount) && discount > 0 ? discount : 0;
 }
 
 function recalcItemRow(tr) {
@@ -241,6 +247,8 @@ function recalcTotals() {
   });
 
   invoiceTotal = Math.round(invoiceTotal * 100) / 100;
+  const discount = Math.min(Math.round(getDiscountValue() * 100) / 100, invoiceTotal);
+  const taxableTotal = Math.round((invoiceTotal - discount) * 100) / 100;
   let total = 0;
   let cgst = 0;
   let sgst = 0;
@@ -249,19 +257,20 @@ function recalcTotals() {
 
   total = invoiceTotal;
   if (taxType === "igst") {
-    igst = Math.round(total * 0.03 * 100) / 100;
+    igst = Math.round(taxableTotal * 0.03 * 100) / 100;
   } else {
-    cgst = Math.round(total * 0.015 * 100) / 100;
-    sgst = Math.round(total * 0.015 * 100) / 100;
+    cgst = Math.round(taxableTotal * 0.015 * 100) / 100;
+    sgst = Math.round(taxableTotal * 0.015 * 100) / 100;
   }
-  finalAmount = Math.round((total + cgst + sgst + igst) * 100) / 100;
+  finalAmount = Math.round((taxableTotal + cgst + sgst + igst) * 100) / 100;
 
   document.getElementById("totalText").textContent = money2(total);
+  document.getElementById("discountText").textContent = money2(discount);
   document.getElementById("cgstText").textContent = money2(cgst);
   document.getElementById("sgstText").textContent = money2(sgst);
   document.getElementById("igstText").textContent = money2(igst);
   document.getElementById("invoiceTotalText").textContent = money2(finalAmount);
-  const summary = { total, cgst, sgst, igst, finalAmount };
+  const summary = { total, discount, cgst, sgst, igst, finalAmount };
   updateBillingMeta(summary);
   return summary;
 }
@@ -414,6 +423,10 @@ function getValidatedPayload() {
   }
 
   const summary = recalcTotals();
+  const discount = getDiscountValue();
+  if (discount > Number(summary.total || 0)) {
+    throw new Error("Discount cannot be greater than the total.");
+  }
   const paymentMode = getPaymentMode();
   let cashAmount = null;
   let bankAmount = null;
@@ -446,6 +459,7 @@ function getValidatedPayload() {
     cash_amount: cashAmount,
     bank_amount: bankAmount,
     items: filtered,
+    discount,
     tax_type: getTaxType(),
   };
 }
@@ -477,12 +491,14 @@ function applyBillSummary(bill) {
   window.__ORIGINAL_BILL__ = JSON.parse(JSON.stringify(bill));
   document.getElementById("invoiceNoText").textContent = bill.invoice_no_text || String(bill.invoice_no);
   document.getElementById("totalText").textContent = money2(bill.total);
+  document.getElementById("discountText").textContent = money2(bill.discount || 0);
   document.getElementById("cgstText").textContent = money2(bill.cgst);
   document.getElementById("sgstText").textContent = money2(bill.sgst);
   document.getElementById("igstText").textContent = money2(bill.igst || 0);
   document.getElementById("invoiceTotalText").textContent = money2(bill.final_amount);
   updateBillingMeta({
     total: bill.total,
+    discount: bill.discount || 0,
     cgst: bill.cgst,
     sgst: bill.sgst,
     igst: bill.igst || 0,
@@ -546,7 +562,7 @@ function enableEditMode() {
   document.querySelectorAll("#itemsTbody input, #itemsTbody button").forEach((el) => {
     el.disabled = false;
   });
-  document.querySelectorAll("#taxTypeCgstSgst, #taxTypeIgst, #paymentModeCash, #paymentModeBank, #paymentModeCashBank, #cashAmountInput, #bankAmountInput").forEach((el) => {
+  document.querySelectorAll("#taxTypeCgstSgst, #taxTypeIgst, #paymentModeCash, #paymentModeBank, #paymentModeCashBank, #cashAmountInput, #bankAmountInput, #discountInput").forEach((el) => {
     el.disabled = false;
   });
   toggleSplitPaymentFields(getPaymentMode());
@@ -566,7 +582,7 @@ function disableEditMode() {
   document.querySelectorAll("#itemsTbody input, #itemsTbody button").forEach((el) => {
     el.disabled = false;
   });
-  document.querySelectorAll("#taxTypeCgstSgst, #taxTypeIgst, #paymentModeCash, #paymentModeBank, #paymentModeCashBank, #cashAmountInput, #bankAmountInput").forEach((el) => {
+  document.querySelectorAll("#taxTypeCgstSgst, #taxTypeIgst, #paymentModeCash, #paymentModeBank, #paymentModeCashBank, #cashAmountInput, #bankAmountInput, #discountInput").forEach((el) => {
     el.disabled = false;
   });
   toggleSplitPaymentFields(getPaymentMode());
@@ -583,6 +599,7 @@ async function loadBillIntoForm(invoiceNo, options = {}) {
   setPaymentMode(bill.payment_mode || "cash");
   setValueIfPresent("cashAmountInput", bill.cash_amount ?? "");
   setValueIfPresent("bankAmountInput", bill.bank_amount ?? "");
+  setValueIfPresent("discountInput", bill.discount ?? "");
   setTaxType(bill.tax_type || "cgst_sgst");
 
   clearItems();
@@ -641,6 +658,7 @@ function wireActions() {
   const paymentCashEl = document.getElementById("paymentModeCash");
   const paymentBankEl = document.getElementById("paymentModeBank");
   const paymentCashBankEl = document.getElementById("paymentModeCashBank");
+  const discountInput = document.getElementById("discountInput");
 
   function enforceTaxTypeState(source) {
     setTaxType(source);
@@ -704,6 +722,9 @@ function wireActions() {
       enforcePaymentModeState("cash");
     }
   });
+
+  discountInput.addEventListener("input", recalcTotals);
+  discountInput.addEventListener("change", recalcTotals);
 
   document.getElementById("addItemBtn").addEventListener("click", () => {
     addItemRow();

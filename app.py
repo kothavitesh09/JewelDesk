@@ -357,6 +357,7 @@ def _serialize_bill(doc, include_items: bool = False):
         "bank_amount": round(float(doc.get("bank_amount", 0) or 0), 2),
         "tax_type": doc.get("tax_type", "cgst_sgst"),
         "total": doc.get("total", 0),
+        "discount": round(float(doc.get("discount", 0) or 0), 2),
         "cgst": doc.get("cgst", 0),
         "sgst": doc.get("sgst", 0),
         "igst": doc.get("igst", 0),
@@ -561,10 +562,22 @@ def _normalize_invoice_payload(data):
         )
 
     total = round(total, 2)
-    cgst = round(cgst_total, 2)
-    sgst = round(sgst_total, 2)
-    igst = round(igst_total, 2)
-    final_amount = round(total + cgst + sgst + igst, 2)
+    discount = round(safe_float(data.get("discount"), 0.0), 2)
+    if discount < 0:
+        raise ValueError("discount must be 0 or greater.")
+    if discount > total:
+        raise ValueError("discount cannot be greater than total.")
+
+    taxable_total = round(total - discount, 2)
+    if tax_type == "igst":
+        igst = round(taxable_total * 0.03, 2)
+        cgst = 0.0
+        sgst = 0.0
+    else:
+        cgst = round(taxable_total * 0.015, 2)
+        sgst = round(taxable_total * 0.015, 2)
+        igst = 0.0
+    final_amount = round(taxable_total + cgst + sgst + igst, 2)
 
     if payment_mode == "cash_bank":
         cash_amount = safe_float(data.get("cash_amount"), None)
@@ -594,6 +607,7 @@ def _normalize_invoice_payload(data):
         "tax_type": tax_type,
         "items": normalized_items,
         "total": total,
+        "discount": discount,
         "cgst": cgst,
         "sgst": sgst,
         "igst": igst,
