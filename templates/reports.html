@@ -110,113 +110,142 @@
       </div>
     </div>
 
-    <div class="dashboard-secondary-grid">
-      <div class="premium-card dashboard-panel-card">
-        <div class="dashboard-card-title-row">
+    <div class="analytics-grid">
+      <article class="premium-card dashboard-panel-card analytics-card">
+        <div class="analytics-card__header">
           <div>
-            <h2 class="dashboard-card-heading">Sales Trend</h2>
-            <p class="dashboard-card-note">Daily invoice totals for the selected range</p>
+            <h2 class="dashboard-card-heading">Sales Overview</h2>
+            <p class="dashboard-card-note">Revenue, orders, and profit movement</p>
           </div>
-          <div class="segmented-control" id="trendRangeToggle">
-            <button class="segmented-control__btn is-active" type="button" data-range="7">Last 7 Days</button>
-            <button class="segmented-control__btn" type="button" data-range="30">Last 30 Days</button>
+          <select class="analytics-select" id="salesRangeSelect" aria-label="Sales overview range">
+            <option value="week">Week</option>
+            <option value="month" selected>Month</option>
+            <option value="year">Year</option>
+          </select>
+        </div>
+        <div class="analytics-summary-row">
+          <div class="analytics-mini-stat">
+            <span>Total Sales</span>
+            <strong id="salesOverviewTotal">Rs 0.00</strong>
+          </div>
+          <div class="analytics-mini-stat analytics-mini-stat--positive">
+            <span>Growth</span>
+            <strong id="salesOverviewGrowth">0%</strong>
+          </div>
+          <div class="analytics-mini-stat">
+            <span>Avg Daily Sales</span>
+            <strong id="salesOverviewAverage">Rs 0.00</strong>
           </div>
         </div>
-        <div class="trend-chart-shell" id="trendChartShell">
-          <svg id="trendChart" viewBox="0 0 640 240" preserveAspectRatio="none" aria-label="Sales trend chart">
+        <div class="analytics-chart-shell">
+          <svg id="salesOverviewChart" class="analytics-chart" viewBox="0 0 680 280" preserveAspectRatio="none" aria-label="Sales overview line chart">
             <defs>
-              <linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stop-color="#d4af37" stop-opacity="0.38"></stop>
-                <stop offset="100%" stop-color="#d4af37" stop-opacity="0.02"></stop>
+              <linearGradient id="salesLineGradient" x1="0" x2="1" y1="0" y2="0">
+                <stop offset="0%" stop-color="#f4d675"></stop>
+                <stop offset="55%" stop-color="#d4af37"></stop>
+                <stop offset="100%" stop-color="#a8761a"></stop>
+              </linearGradient>
+              <linearGradient id="salesAreaGradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#d4af37" stop-opacity="0.32"></stop>
+                <stop offset="100%" stop-color="#d4af37" stop-opacity="0"></stop>
               </linearGradient>
             </defs>
-            <path id="trendArea" fill="url(#trendFill)"></path>
-            <path id="trendLine" fill="none" stroke="#d4af37" stroke-width="3" stroke-linecap="round"></path>
+            <g id="salesGridLines"></g>
+            <path id="salesOverviewArea" fill="url(#salesAreaGradient)"></path>
+            <path id="salesOverviewLine" fill="none" stroke="url(#salesLineGradient)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
           </svg>
-          <div class="trend-chart__empty" id="trendChartEmpty">No trend data available for this range.</div>
-          <div class="trend-tooltip" id="trendTooltip"></div>
-          <div class="trend-points" id="trendPoints"></div>
+          <div class="analytics-points" id="salesOverviewPoints"></div>
+          <div class="analytics-tooltip" id="salesOverviewTooltip"></div>
+          <div class="trend-chart__empty" id="salesOverviewEmpty">No sales data available for this range.</div>
         </div>
-      </div>
+      </article>
 
-      <div class="dashboard-side-column">
-        <div class="premium-card dashboard-panel-card">
-          <div class="dashboard-card-title-row">
-            <div>
-              <h2 class="dashboard-card-heading">Quick Actions</h2>
-              <p class="dashboard-card-note">Shortcuts for daily billing work</p>
-            </div>
+      <article class="premium-card dashboard-panel-card analytics-card">
+        <div class="analytics-card__header">
+          <div>
+            <h2 class="dashboard-card-heading">Purchase Overview</h2>
+            <p class="dashboard-card-note">Supplier purchases and stock inflow</p>
           </div>
-          <div class="quick-actions quick-actions--inline">
-            <a href="/billing" class="btn btn-premium-primary quick-actions__primary">Create Invoice</a>
-            <a href="/purchases" class="btn btn-premium-secondary">Add Purchase</a>
-          </div>
-          <div class="top-items-list top-items-list--reference" id="topItemsList"></div>
-          <div class="reports-empty-state reports-empty-state--inline" id="topItemsEmpty">No top selling items yet.</div>
+          <select class="analytics-select" id="purchaseRangeSelect" aria-label="Purchase overview range">
+            <option value="week">Week</option>
+            <option value="month" selected>Month</option>
+            <option value="year">Year</option>
+          </select>
         </div>
-      </div>
+        <div class="analytics-summary-row">
+          <div class="analytics-mini-stat">
+            <span>Total Purchases</span>
+            <strong id="purchaseOverviewTotal">Rs 0.00</strong>
+          </div>
+          <div class="analytics-mini-stat analytics-mini-stat--positive">
+            <span>Purchase Growth</span>
+            <strong id="purchaseOverviewGrowth">0%</strong>
+          </div>
+          <div class="analytics-mini-stat">
+            <span>Avg Purchase Value</span>
+            <strong id="purchaseOverviewAverage">Rs 0.00</strong>
+          </div>
+        </div>
+        <div class="analytics-chart-shell">
+          <svg id="purchaseOverviewChart" class="analytics-chart" viewBox="0 0 680 280" preserveAspectRatio="none" aria-label="Purchase overview bar chart">
+            <defs>
+              <linearGradient id="purchaseGoldGradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#e3c35f"></stop>
+                <stop offset="100%" stop-color="#b38322"></stop>
+              </linearGradient>
+              <linearGradient id="purchaseNavyGradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#243858"></stop>
+                <stop offset="100%" stop-color="#0f1c33"></stop>
+              </linearGradient>
+            </defs>
+            <g id="purchaseGridLines"></g>
+            <g id="purchaseOverviewBars"></g>
+          </svg>
+          <div class="analytics-tooltip" id="purchaseOverviewTooltip"></div>
+          <div class="trend-chart__empty" id="purchaseOverviewEmpty">No purchase data available for this range.</div>
+        </div>
+      </article>
     </div>
 
+    <section class="premium-card dashboard-panel-card category-analytics-card">
+      <div class="analytics-card__header">
+        <div>
+          <h2 class="dashboard-card-heading">Top Selling Categories</h2>
+          <p class="dashboard-card-note">Revenue contribution by jewellery category</p>
+        </div>
+        <div class="category-toggle" id="categoryToggle">
+          <button class="category-toggle__btn category-toggle__btn--gold is-active" type="button" data-metal="gold">Gold</button>
+          <button class="category-toggle__btn category-toggle__btn--silver" type="button" data-metal="silver">Silver</button>
+        </div>
+      </div>
+      <div class="category-analytics-layout">
+        <div class="category-list" id="categoryList"></div>
+        <div class="donut-chart-shell">
+          <svg id="categoryDonutChart" class="donut-chart" viewBox="0 0 260 260" aria-label="Top selling categories donut chart"></svg>
+          <div class="donut-chart__center">
+            <span>Total Revenue</span>
+            <strong id="categoryTotalRevenue">Rs 0.00</strong>
+            <small id="categoryTotalQty">0 sold</small>
+          </div>
+          <div class="analytics-tooltip" id="categoryTooltip"></div>
+        </div>
+      </div>
+      <div class="reports-empty-state reports-empty-state--inline" id="topItemsEmpty">No top selling categories yet.</div>
+    </section>
+
     <div class="dashboard-bottom-grid">
-      <div class="premium-card dashboard-panel-card">
+      <div class="premium-card dashboard-panel-card inventory-analytics-card">
         <div class="dashboard-card-title-row">
           <div>
             <h2 class="dashboard-card-heading">Inventory Snapshot</h2>
             <p class="dashboard-card-note">Combined stock view with status at a glance</p>
           </div>
         </div>
-        <div class="inventory-filters" id="inventoryPills"></div>
-        <div class="table-responsive premium-table-wrap">
-          <table class="table reports-table dashboard-table">
-            <thead>
-              <tr>
-                <th>Metal Type</th>
-                <th class="text-end">Available Weight</th>
-              </tr>
-            </thead>
-            <tbody id="inventoryTableBody"></tbody>
-          </table>
-        </div>
+        <div class="inventory-analytics-list" id="inventoryTableBody"></div>
         <div class="reports-empty-state reports-empty-state--inline" id="inventoryEmptyState">Inventory data is not configured yet.</div>
-      </div>
-
-      <div class="premium-card dashboard-panel-card">
-        <div class="dashboard-card-title-row">
-          <div>
-            <h2 class="dashboard-card-heading">Recent Transactions</h2>
-            <p class="dashboard-card-note">Latest business activity across sales and purchases</p>
-          </div>
-        </div>
-        <div class="recent-transactions recent-transactions--split">
-          <div class="recent-transactions__column">
-            <div class="recent-transactions__head">
-              <span>Latest Sales</span>
-              <a href="/billing" class="view-all-link">View All</a>
-            </div>
-            <div id="recentSalesList"></div>
-          </div>
-          <div class="recent-transactions__column">
-            <div class="recent-transactions__head">
-              <span>Latest Purchases</span>
-              <a href="/purchases" class="view-all-link">View All</a>
-            </div>
-            <div id="recentPurchasesList"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="premium-card dashboard-panel-card">
-        <div class="dashboard-card-title-row">
-          <div>
-            <h2 class="dashboard-card-heading">Low Stock Alerts</h2>
-            <p class="dashboard-card-note">Critical items are highlighted first for quick action</p>
-          </div>
-        </div>
-        <div class="alert-cards" id="lowStockAlerts"></div>
-        <div class="reports-empty-state reports-empty-state--inline" id="lowStockEmptyState">No low stock alerts in the current dataset.</div>
       </div>
     </div>
   </section>
 
-  <script src="{{ url_for('static', filename='js/reports.js', v='20260426a') }}"></script>
+  <script src="{{ url_for('static', filename='js/reports.js', v='20260517f') }}"></script>
 {% endblock %}
