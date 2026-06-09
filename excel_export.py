@@ -29,6 +29,13 @@ EXCEL_HEADERS = [
 ]
 
 
+def _to_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _parse_yyyy_mm_dd(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
@@ -62,28 +69,53 @@ def _build_row(
     cash_amount: Any = "",
     bank_amount: Any = "",
     discount: Any = "",
+    bill_tax_type: str = "",
+    bill_cgst: Any = 0,
+    bill_sgst: Any = 0,
+    bill_igst: Any = 0,
+    bill_taxable_total: Any = 0,
+    item_count: int = 1,
     item: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     item = item or {}
     taxable_amount = item.get("amount", "")
-    total_amount = item.get("invoice_amount", taxable_amount)
-    tax_type = str(item.get("tax_type") or "").strip().lower()
+    tax_type = str(item.get("tax_type") or bill_tax_type or "").strip().lower()
 
     cgst_amount = ""
     sgst_amount = ""
     igst_amount = ""
 
-    if taxable_amount != "" and total_amount != "":
-        tax_amount = round(float(total_amount) - float(taxable_amount), 2)
-        if tax_type == "igst":
-            igst_amount = tax_amount
+    taxable_value = _to_float(taxable_amount, 0.0) if taxable_amount != "" else 0.0
+    taxable_total = _to_float(bill_taxable_total, 0.0)
+    row_share = taxable_value / taxable_total if taxable_total > 0 else 1 / max(item_count, 1)
+
+    if taxable_amount != "":
+        if any(key in item for key in ("cgst", "sgst", "igst")):
+            cgst_amount = round(_to_float(item.get("cgst"), 0.0), 2)
+            sgst_amount = round(_to_float(item.get("sgst"), 0.0), 2)
+            igst_amount = round(_to_float(item.get("igst"), 0.0), 2)
+        elif any(_to_float(value, 0.0) for value in (bill_cgst, bill_sgst, bill_igst)):
+            cgst_amount = round(_to_float(bill_cgst, 0.0) * row_share, 2)
+            sgst_amount = round(_to_float(bill_sgst, 0.0) * row_share, 2)
+            igst_amount = round(_to_float(bill_igst, 0.0) * row_share, 2)
+        elif tax_type == "igst":
             cgst_amount = 0.0
             sgst_amount = 0.0
+            igst_amount = round(taxable_value * 0.03, 2)
         else:
-            half_tax = round(tax_amount / 2, 2)
-            cgst_amount = half_tax
-            sgst_amount = round(tax_amount - half_tax, 2)
+            cgst_amount = round(taxable_value * 0.015, 2)
+            sgst_amount = round(taxable_value * 0.015, 2)
             igst_amount = 0.0
+
+    total_amount = taxable_amount
+    if taxable_amount != "":
+        total_amount = round(
+            taxable_value
+            + _to_float(cgst_amount, 0.0)
+            + _to_float(sgst_amount, 0.0)
+            + _to_float(igst_amount, 0.0),
+            2,
+        )
 
     return {
         "Date": date_str,
@@ -124,6 +156,11 @@ def export_bills_to_excel_bytes(from_date: Optional[str], to_date: Optional[str]
                 "cash_amount": 1,
                 "bank_amount": 1,
                 "discount": 1,
+                "tax_type": 1,
+                "total": 1,
+                "cgst": 1,
+                "sgst": 1,
+                "igst": 1,
                 "items": 1,
             },
         )
@@ -148,6 +185,11 @@ def export_bills_to_excel_bytes(from_date: Optional[str], to_date: Optional[str]
         cash_amount = bill.get("cash_amount", "")
         bank_amount = bill.get("bank_amount", "")
         discount = bill.get("discount", 0)
+        bill_tax_type = str(bill.get("tax_type") or "").strip().lower()
+        bill_cgst = bill.get("cgst", 0)
+        bill_sgst = bill.get("sgst", 0)
+        bill_igst = bill.get("igst", 0)
+        bill_taxable_total = bill.get("total", 0)
 
         if invoice_no_text is None or created_at is None:
             continue
@@ -156,11 +198,45 @@ def export_bills_to_excel_bytes(from_date: Optional[str], to_date: Optional[str]
         items = bill.get("items", []) or []
 
         if not items:
-            rows.append(_build_row(invoice_no_text, date_str, party_gst_no, customer_name, payment_mode, cash_amount, bank_amount, discount))
+            rows.append(
+                _build_row(
+                    invoice_no_text,
+                    date_str,
+                    party_gst_no,
+                    customer_name,
+                    payment_mode,
+                    cash_amount,
+                    bank_amount,
+                    discount,
+                    bill_tax_type=bill_tax_type,
+                    bill_cgst=bill_cgst,
+                    bill_sgst=bill_sgst,
+                    bill_igst=bill_igst,
+                    bill_taxable_total=bill_taxable_total,
+                )
+            )
             continue
 
         for item in items:
-            rows.append(_build_row(invoice_no_text, date_str, party_gst_no, customer_name, payment_mode, cash_amount, bank_amount, discount, item))
+            rows.append(
+                _build_row(
+                    invoice_no_text,
+                    date_str,
+                    party_gst_no,
+                    customer_name,
+                    payment_mode,
+                    cash_amount,
+                    bank_amount,
+                    discount,
+                    bill_tax_type=bill_tax_type,
+                    bill_cgst=bill_cgst,
+                    bill_sgst=bill_sgst,
+                    bill_igst=bill_igst,
+                    bill_taxable_total=bill_taxable_total,
+                    item_count=len(items),
+                    item=item,
+                )
+            )
 
     df = pd.DataFrame(rows, columns=EXCEL_HEADERS)
 
