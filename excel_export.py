@@ -25,6 +25,8 @@ EXCEL_HEADERS = [
     "Mode of Payment",
     "Amt in Cash",
     "Amt in Bank",
+    "Exchange Wt",
+    "Exchange Amt",
     "Discount",
 ]
 
@@ -68,6 +70,8 @@ def _build_row(
     payment_mode: str,
     cash_amount: Any = "",
     bank_amount: Any = "",
+    exchange_weight: Any = "",
+    exchange_amount: Any = "",
     discount: Any = "",
     bill_tax_type: str = "",
     bill_cgst: Any = 0,
@@ -78,6 +82,7 @@ def _build_row(
     item: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     item = item or {}
+    is_exchange = payment_mode == "exchange"
     taxable_amount = item.get("amount", "")
     tax_type = str(item.get("tax_type") or bill_tax_type or "").strip().lower()
 
@@ -134,6 +139,8 @@ def _build_row(
         "Mode of Payment": "Cash + Bank" if payment_mode == "cash_bank" else (payment_mode.title() if payment_mode else ""),
         "Amt in Cash": cash_amount if payment_mode in {"cash_bank", "exchange"} else "",
         "Amt in Bank": bank_amount if payment_mode in {"cash_bank", "exchange"} else "",
+        "Exchange Wt": format_weight(exchange_weight) if is_exchange and exchange_weight not in (None, "") else "",
+        "Exchange Amt": exchange_amount if is_exchange else "",
         "Discount": discount,
     }
 
@@ -155,6 +162,8 @@ def export_bills_to_excel_bytes(from_date: Optional[str], to_date: Optional[str]
                 "payment_mode": 1,
                 "cash_amount": 1,
                 "bank_amount": 1,
+                "exchange_weight": 1,
+                "exchange_amount": 1,
                 "discount": 1,
                 "tax_type": 1,
                 "total": 1,
@@ -184,6 +193,8 @@ def export_bills_to_excel_bytes(from_date: Optional[str], to_date: Optional[str]
         payment_mode = str(bill.get("payment_mode") or "").strip()
         cash_amount = bill.get("cash_amount", "")
         bank_amount = bill.get("bank_amount", "")
+        exchange_weight = bill.get("exchange_weight", "")
+        exchange_amount = bill.get("exchange_amount", "")
         discount = bill.get("discount", 0)
         bill_tax_type = str(bill.get("tax_type") or "").strip().lower()
         bill_cgst = bill.get("cgst", 0)
@@ -207,6 +218,8 @@ def export_bills_to_excel_bytes(from_date: Optional[str], to_date: Optional[str]
                     payment_mode,
                     cash_amount,
                     bank_amount,
+                    exchange_weight,
+                    exchange_amount,
                     discount,
                     bill_tax_type=bill_tax_type,
                     bill_cgst=bill_cgst,
@@ -227,6 +240,8 @@ def export_bills_to_excel_bytes(from_date: Optional[str], to_date: Optional[str]
                     payment_mode,
                     cash_amount,
                     bank_amount,
+                    exchange_weight,
+                    exchange_amount,
                     discount,
                     bill_tax_type=bill_tax_type,
                     bill_cgst=bill_cgst,
