@@ -117,6 +117,69 @@
                 />
                 <span>Cash + Bank</span>
               </label>
+              <label class="tax-pill tax-pill--light" for="paymentModeExchange">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="paymentModeExchange"
+                />
+                <span>Exchange</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="mb-4" id="exchangePaymentFields" style="display:none;">
+            <div class="split-payment-grid mb-3">
+              <div>
+                <label class="form-label premium-label" for="exchangeDescriptionInput">Exchange Description</label>
+                <input
+                  type="text"
+                  id="exchangeDescriptionInput"
+                  class="form-control premium-input"
+                  placeholder="Enter exchange details"
+                />
+              </div>
+              <div>
+                <label class="form-label premium-label" for="exchangeWeightInput">Exchange Weight</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  id="exchangeWeightInput"
+                  class="form-control premium-input"
+                  placeholder="Enter weight"
+                />
+              </div>
+              <div>
+                <label class="form-label premium-label" for="exchangeAmountInput">Exchange Amount</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  id="exchangeAmountInput"
+                  class="form-control premium-input"
+                  placeholder="Enter exchange amount"
+                />
+              </div>
+              <div>
+                <label class="form-label premium-label" for="exchangeBalanceAmountInput">Balance Amount</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  id="exchangeBalanceAmountInput"
+                  class="form-control premium-input"
+                  readonly
+                />
+              </div>
+            </div>
+            <div>
+              <label class="form-label premium-label" for="balancePaymentModeInput">Balance Payment Mode</label>
+              <select id="balancePaymentModeInput" class="form-select premium-input">
+                <option value="cash">Cash</option>
+                <option value="bank">Bank</option>
+                <option value="cash_bank">Cash + Bank</option>
+              </select>
             </div>
           </div>
 

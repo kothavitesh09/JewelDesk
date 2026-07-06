@@ -10,6 +10,19 @@ function money3(n) {
   return x.toFixed(3);
 }
 
+function weightInputValue(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const x = Number(value);
+  return isFinite(x) ? money3(x) : "";
+}
+
+function formatWeightInput(input) {
+  const x = Number(input?.value);
+  if (input && input.value !== "" && isFinite(x)) {
+    input.value = money3(x);
+  }
+}
+
 function toast(message, type = "success") {
   window.JewelDeskUI?.toast?.(message, type);
 }
@@ -125,27 +138,38 @@ function updateBillingMeta(summary = {}) {
 }
 
 function getPaymentMode() {
+  const exchangeChecked = document.getElementById("paymentModeExchange").checked;
   const cashBankChecked = document.getElementById("paymentModeCashBank").checked;
   const bankChecked = document.getElementById("paymentModeBank").checked;
+  if (exchangeChecked) return "exchange";
   if (cashBankChecked) return "cash_bank";
   return bankChecked ? "bank" : "cash";
 }
 
+function getBalancePaymentMode() {
+  const mode = document.getElementById("balancePaymentModeInput")?.value || "cash";
+  return mode === "bank" || mode === "cash_bank" ? mode : "cash";
+}
+
 function setPaymentMode(paymentMode) {
-  const normalized = paymentMode === "bank" || paymentMode === "cash_bank" ? paymentMode : "cash";
+  const normalized = paymentMode === "bank" || paymentMode === "cash_bank" || paymentMode === "exchange" ? paymentMode : "cash";
   document.getElementById("paymentModeCash").checked = normalized === "cash";
   document.getElementById("paymentModeBank").checked = normalized === "bank";
   document.getElementById("paymentModeCashBank").checked = normalized === "cash_bank";
+  document.getElementById("paymentModeExchange").checked = normalized === "exchange";
   toggleSplitPaymentFields(normalized);
 }
 
 function toggleSplitPaymentFields(paymentMode) {
   const splitPaymentFields = document.getElementById("splitPaymentFields");
+  const exchangePaymentFields = document.getElementById("exchangePaymentFields");
   const cashAmountInput = document.getElementById("cashAmountInput");
   const bankAmountInput = document.getElementById("bankAmountInput");
-  const isSplitPayment = paymentMode === "cash_bank";
+  const isExchangePayment = paymentMode === "exchange";
+  const isSplitPayment = paymentMode === "cash_bank" || (isExchangePayment && getBalancePaymentMode() === "cash_bank");
 
   splitPaymentFields.style.display = isSplitPayment ? "block" : "none";
+  exchangePaymentFields.style.display = isExchangePayment ? "block" : "none";
   cashAmountInput.disabled = !isSplitPayment;
   bankAmountInput.disabled = !isSplitPayment;
 
@@ -153,6 +177,37 @@ function toggleSplitPaymentFields(paymentMode) {
     cashAmountInput.value = "";
     bankAmountInput.value = "";
   }
+}
+
+function updateExchangePaymentFields(summary = {}) {
+  const paymentMode = getPaymentMode();
+  toggleSplitPaymentFields(paymentMode);
+
+  if (paymentMode !== "exchange") {
+    return;
+  }
+
+  const finalAmount = Math.round(Number(summary.finalAmount || 0) * 100) / 100;
+  const exchangeAmountInput = document.getElementById("exchangeAmountInput");
+  const exchangeBalanceAmountInput = document.getElementById("exchangeBalanceAmountInput");
+  const cashAmountInput = document.getElementById("cashAmountInput");
+  const bankAmountInput = document.getElementById("bankAmountInput");
+  const exchangeAmount = Math.round(Number(exchangeAmountInput?.value || 0) * 100) / 100;
+  const balanceAmount = Math.round(Math.max(finalAmount - (isFinite(exchangeAmount) ? exchangeAmount : 0), 0) * 100) / 100;
+  const balancePaymentMode = getBalancePaymentMode();
+
+  if (exchangeBalanceAmountInput) {
+    exchangeBalanceAmountInput.value = money2(balanceAmount);
+  }
+
+  if (balancePaymentMode === "cash") {
+    cashAmountInput.value = money2(balanceAmount);
+    bankAmountInput.value = "";
+  } else if (balancePaymentMode === "bank") {
+    cashAmountInput.value = "";
+    bankAmountInput.value = money2(balanceAmount);
+  }
+  formatWeightInput(document.getElementById("exchangeWeightInput"));
 }
 
 function getTaxType() {
@@ -272,6 +327,7 @@ function recalcTotals() {
   document.getElementById("invoiceTotalText").textContent = money2(finalAmount);
   const summary = { total, discount, cgst, sgst, igst, finalAmount };
   updateBillingMeta(summary);
+  updateExchangePaymentFields(summary);
   return summary;
 }
 
@@ -296,6 +352,9 @@ function bindRowEvents(tr) {
       recalcTotals();
     });
   });
+  tr.querySelectorAll(".item-gross-weight, .item-stone-weight, .item-net-weight, .item-value-addition").forEach((input) => {
+    input.addEventListener("blur", () => formatWeightInput(input));
+  });
   tr.querySelector(".removeItemBtn").addEventListener("click", () => {
     tr.remove();
     renderRowIndexes();
@@ -311,10 +370,10 @@ function addItemRow(item = {}, options = {}) {
   const tr = document.createElement("tr");
   const itemType = String(item.item_type || "Gold");
   const quantity = item.quantity ?? "";
-  const grossWeight = item.gross_weight ?? item.qty_gms ?? "";
-  const stoneWeight = item.stone_weight ?? "";
-  const netWeight = item.qty_gms ?? "";
-  const valueAddition = item.value_addition ?? "";
+  const grossWeight = weightInputValue(item.gross_weight ?? item.qty_gms ?? "");
+  const stoneWeight = weightInputValue(item.stone_weight ?? "");
+  const netWeight = weightInputValue(item.qty_gms ?? "");
+  const valueAddition = weightInputValue(item.value_addition ?? "");
   const ratePerG = item.rate_per_g ?? "";
   const stoneAmount = item.stone_amount ?? "";
   const invoiceAmount = item.invoice_amount ?? item.amount ?? "";
@@ -430,6 +489,10 @@ function getValidatedPayload() {
   const paymentMode = getPaymentMode();
   let cashAmount = null;
   let bankAmount = null;
+  let exchangeDescription = "";
+  let exchangeWeight = null;
+  let exchangeAmount = null;
+  let balancePaymentMode = null;
 
   if (paymentMode === "cash_bank") {
     cashAmount = Number(document.getElementById("cashAmountInput").value);
@@ -447,6 +510,45 @@ function getValidatedPayload() {
     if (splitTotal !== finalAmount) {
       throw new Error("Cash amount + Bank amount must equal the invoice total.");
     }
+  } else if (paymentMode === "exchange") {
+    exchangeDescription = document.getElementById("exchangeDescriptionInput").value.trim();
+    exchangeWeight = Number(document.getElementById("exchangeWeightInput").value || 0);
+    exchangeAmount = Number(document.getElementById("exchangeAmountInput").value);
+    balancePaymentMode = getBalancePaymentMode();
+
+    if (!isFinite(exchangeAmount) || exchangeAmount < 0) {
+      throw new Error("Exchange amount must be 0 or greater.");
+    }
+
+    const finalAmount = Math.round(Number(summary.finalAmount || 0) * 100) / 100;
+    const roundedExchangeAmount = Math.round(exchangeAmount * 100) / 100;
+    if (roundedExchangeAmount > finalAmount) {
+      throw new Error("Exchange amount cannot be greater than the invoice total.");
+    }
+
+    const balanceAmount = Math.round((finalAmount - roundedExchangeAmount) * 100) / 100;
+    if (balancePaymentMode === "cash") {
+      cashAmount = balanceAmount;
+      bankAmount = 0;
+    } else if (balancePaymentMode === "bank") {
+      cashAmount = 0;
+      bankAmount = balanceAmount;
+    } else {
+      cashAmount = Number(document.getElementById("cashAmountInput").value);
+      bankAmount = Number(document.getElementById("bankAmountInput").value);
+
+      if (!isFinite(cashAmount) || cashAmount <= 0) {
+        throw new Error("Cash amount must be greater than 0 for Exchange Cash + Bank.");
+      }
+      if (!isFinite(bankAmount) || bankAmount <= 0) {
+        throw new Error("Bank amount must be greater than 0 for Exchange Cash + Bank.");
+      }
+
+      const splitTotal = Math.round((cashAmount + bankAmount) * 100) / 100;
+      if (splitTotal !== balanceAmount) {
+        throw new Error("Cash amount + Bank amount must equal the exchange balance amount.");
+      }
+    }
   }
 
   return {
@@ -458,6 +560,10 @@ function getValidatedPayload() {
     payment_mode: paymentMode,
     cash_amount: cashAmount,
     bank_amount: bankAmount,
+    exchange_description: exchangeDescription,
+    exchange_weight: exchangeWeight,
+    exchange_amount: exchangeAmount,
+    balance_payment_mode: balancePaymentMode,
     items: filtered,
     discount,
     tax_type: getTaxType(),
@@ -562,7 +668,7 @@ function enableEditMode() {
   document.querySelectorAll("#itemsTbody input, #itemsTbody button").forEach((el) => {
     el.disabled = false;
   });
-  document.querySelectorAll("#taxTypeCgstSgst, #taxTypeIgst, #paymentModeCash, #paymentModeBank, #paymentModeCashBank, #cashAmountInput, #bankAmountInput, #discountInput").forEach((el) => {
+  document.querySelectorAll("#taxTypeCgstSgst, #taxTypeIgst, #paymentModeCash, #paymentModeBank, #paymentModeCashBank, #paymentModeExchange, #cashAmountInput, #bankAmountInput, #exchangeDescriptionInput, #exchangeWeightInput, #exchangeAmountInput, #balancePaymentModeInput, #discountInput").forEach((el) => {
     el.disabled = false;
   });
   toggleSplitPaymentFields(getPaymentMode());
@@ -582,7 +688,7 @@ function disableEditMode() {
   document.querySelectorAll("#itemsTbody input, #itemsTbody button").forEach((el) => {
     el.disabled = false;
   });
-  document.querySelectorAll("#taxTypeCgstSgst, #taxTypeIgst, #paymentModeCash, #paymentModeBank, #paymentModeCashBank, #cashAmountInput, #bankAmountInput, #discountInput").forEach((el) => {
+  document.querySelectorAll("#taxTypeCgstSgst, #taxTypeIgst, #paymentModeCash, #paymentModeBank, #paymentModeCashBank, #paymentModeExchange, #cashAmountInput, #bankAmountInput, #exchangeDescriptionInput, #exchangeWeightInput, #exchangeAmountInput, #balancePaymentModeInput, #discountInput").forEach((el) => {
     el.disabled = false;
   });
   toggleSplitPaymentFields(getPaymentMode());
@@ -597,6 +703,10 @@ async function loadBillIntoForm(invoiceNo, options = {}) {
   setValueIfPresent("customerPhone", bill.customer_phone || "");
   document.getElementById("partyGstNo").value = bill.party_gst_no || "";
   setPaymentMode(bill.payment_mode || "cash");
+  setValueIfPresent("exchangeDescriptionInput", bill.exchange_description ?? "");
+  setValueIfPresent("exchangeWeightInput", weightInputValue(bill.exchange_weight ?? ""));
+  setValueIfPresent("exchangeAmountInput", bill.exchange_amount ?? "");
+  setValueIfPresent("balancePaymentModeInput", bill.balance_payment_mode || "cash");
   setValueIfPresent("cashAmountInput", bill.cash_amount ?? "");
   setValueIfPresent("bankAmountInput", bill.bank_amount ?? "");
   setValueIfPresent("discountInput", bill.discount ?? "");
@@ -658,6 +768,7 @@ function wireActions() {
   const paymentCashEl = document.getElementById("paymentModeCash");
   const paymentBankEl = document.getElementById("paymentModeBank");
   const paymentCashBankEl = document.getElementById("paymentModeCashBank");
+  const paymentExchangeEl = document.getElementById("paymentModeExchange");
   const discountInput = document.getElementById("discountInput");
 
   function enforceTaxTypeState(source) {
@@ -682,45 +793,78 @@ function wireActions() {
 
   function enforcePaymentModeState(source) {
     setPaymentMode(source);
+    recalcTotals();
   }
 
   paymentCashEl.addEventListener("change", () => {
-    if (!paymentCashEl.checked && !paymentBankEl.checked && !paymentCashBankEl.checked) {
+    if (!paymentCashEl.checked && !paymentBankEl.checked && !paymentCashBankEl.checked && !paymentExchangeEl.checked) {
       paymentCashEl.checked = true;
     }
     if (paymentCashEl.checked) {
       enforcePaymentModeState("cash");
     } else if (paymentBankEl.checked) {
       enforcePaymentModeState("bank");
+    } else if (paymentExchangeEl.checked) {
+      enforcePaymentModeState("exchange");
     } else {
       enforcePaymentModeState("cash_bank");
     }
   });
 
   paymentBankEl.addEventListener("change", () => {
-    if (!paymentCashEl.checked && !paymentBankEl.checked && !paymentCashBankEl.checked) {
+    if (!paymentCashEl.checked && !paymentBankEl.checked && !paymentCashBankEl.checked && !paymentExchangeEl.checked) {
       paymentBankEl.checked = true;
     }
     if (paymentBankEl.checked) {
       enforcePaymentModeState("bank");
     } else if (paymentCashBankEl.checked) {
       enforcePaymentModeState("cash_bank");
+    } else if (paymentExchangeEl.checked) {
+      enforcePaymentModeState("exchange");
     } else {
       enforcePaymentModeState("cash");
     }
   });
 
   paymentCashBankEl.addEventListener("change", () => {
-    if (!paymentCashEl.checked && !paymentBankEl.checked && !paymentCashBankEl.checked) {
+    if (!paymentCashEl.checked && !paymentBankEl.checked && !paymentCashBankEl.checked && !paymentExchangeEl.checked) {
       paymentCashBankEl.checked = true;
     }
     if (paymentCashBankEl.checked) {
       enforcePaymentModeState("cash_bank");
     } else if (paymentBankEl.checked) {
       enforcePaymentModeState("bank");
+    } else if (paymentExchangeEl.checked) {
+      enforcePaymentModeState("exchange");
     } else {
       enforcePaymentModeState("cash");
     }
+  });
+
+  paymentExchangeEl.addEventListener("change", () => {
+    if (!paymentCashEl.checked && !paymentBankEl.checked && !paymentCashBankEl.checked && !paymentExchangeEl.checked) {
+      paymentExchangeEl.checked = true;
+    }
+    if (paymentExchangeEl.checked) {
+      enforcePaymentModeState("exchange");
+    } else if (paymentCashBankEl.checked) {
+      enforcePaymentModeState("cash_bank");
+    } else if (paymentBankEl.checked) {
+      enforcePaymentModeState("bank");
+    } else {
+      enforcePaymentModeState("cash");
+    }
+  });
+
+  document.getElementById("exchangeAmountInput").addEventListener("input", recalcTotals);
+  document.getElementById("exchangeAmountInput").addEventListener("change", recalcTotals);
+  document.getElementById("exchangeWeightInput").addEventListener("blur", (event) => formatWeightInput(event.target));
+  document.getElementById("balancePaymentModeInput").addEventListener("change", () => {
+    if (getBalancePaymentMode() === "cash_bank") {
+      document.getElementById("cashAmountInput").value = "";
+      document.getElementById("bankAmountInput").value = "";
+    }
+    recalcTotals();
   });
 
   discountInput.addEventListener("input", recalcTotals);

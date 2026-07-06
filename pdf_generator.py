@@ -1,6 +1,8 @@
 from io import BytesIO
 import os
+import re
 from pathlib import Path
+from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Tuple
 from urllib.parse import urlparse
 from urllib.request import urlopen
@@ -9,16 +11,20 @@ from openpyxl import load_workbook
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 from config import BILL_TEMPLATE_PATH, SHOP_ADDRESS, SHOP_GSTIN, SHOP_NAME, SHOP_PHONE
-from utils import format_date_for_pdf, format_invoice_no, rupees_in_words
+from utils import format_date_for_pdf, format_invoice_no, format_weight, rupees_in_words
 
 
 TEMPLATE_SHEET_MAX_COL = 10
 TEMPLATE_SHEET_MAX_ROW = 38
 EMU_PER_POINT = 12700.0
+WINDOWS_FONTS_DIR = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+REGISTERED_TEMPLATE_FONTS: Dict[Tuple[str, str], str] = {}
 
 
 def _money(value: Any) -> str:
@@ -37,13 +43,21 @@ def _money_or_blank(value: Any) -> str:
 
 
 def _qty(value: Any) -> str:
+    if value in (None, ""):
+        return ""
     try:
         num = float(value)
     except Exception:
         return ""
     if num == 0:
         return ""
-    return f"{num:,.3f}".rstrip("0").rstrip(".")
+    return f"{num:,}".rstrip("0").rstrip(".")
+
+
+def _weight(value: Any) -> str:
+    if value in (None, ""):
+        return ""
+    return format_weight(value)
 
 
 def _rate(value: Any) -> str:
@@ -153,13 +167,94 @@ def _box_for_range(
     return left, bottom, right, top
 
 
+def _font_variant(cell) -> str:
+    bold = bool(cell.font and cell.font.bold)
+    italic = bool(cell.font and cell.font.italic)
+    if bold and italic:
+        return "bold_italic"
+    if bold:
+        return "bold"
+    if italic:
+        return "italic"
+    return "regular"
+
+
+def _font_family(cell) -> str:
+    return str(cell.font.name).strip() if cell.font and cell.font.name else "Calibri"
+
+
+def _font_registry_entry_parts(registry_name: str) -> Tuple[List[str], str]:
+    display_name = re.sub(r"\s*\(.*?\)\s*$", "", registry_name).strip()
+    tokens = display_name.split()
+    bold = "Bold" in tokens
+    italic = "Italic" in tokens or "Oblique" in tokens
+    variant = "bold_italic" if bold and italic else "bold" if bold else "italic" if italic else "regular"
+    family_tokens = [token for token in tokens if token not in {"Bold", "Italic", "Oblique", "Regular"}]
+    family_name = " ".join(family_tokens).strip()
+    family_parts = [part.strip().lower() for part in family_name.split("&") if part.strip()]
+    return family_parts or [family_name.lower()], variant
+
+
+@lru_cache(maxsize=1)
+def _installed_font_files() -> Dict[str, Dict[str, Path]]:
+    fonts: Dict[str, Dict[str, Path]] = {}
+    if os.name != "nt":
+        return fonts
+
+    try:
+        import winreg
+
+        registry_path = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, registry_path) as font_key:
+            idx = 0
+            while True:
+                try:
+                    registry_name, file_name, _ = winreg.EnumValue(font_key, idx)
+                except OSError:
+                    break
+                idx += 1
+
+                path = Path(str(file_name))
+                if not path.is_absolute():
+                    path = WINDOWS_FONTS_DIR / path
+                if not path.exists():
+                    continue
+
+                family_parts, variant = _font_registry_entry_parts(str(registry_name))
+                for family_name in family_parts:
+                    fonts.setdefault(family_name, {}).setdefault(variant, path)
+    except Exception:
+        return fonts
+
+    return fonts
+
+
 def _font_name(cell) -> str:
-    return "Helvetica-Bold" if cell.font and cell.font.bold else "Helvetica"
+    family = _font_family(cell)
+    normalized_family = family.lower()
+    variant = _font_variant(cell)
+    cache_key = (normalized_family, variant)
+    if cache_key in REGISTERED_TEMPLATE_FONTS:
+        return REGISTERED_TEMPLATE_FONTS[cache_key]
+
+    family_fonts = _installed_font_files().get(normalized_family, {})
+    font_path = family_fonts.get(variant) or family_fonts.get("regular")
+    if font_path:
+        reportlab_name = f"TemplateFont-{normalized_family}-{variant}".replace(" ", "-")
+        try:
+            pdfmetrics.registerFont(TTFont(reportlab_name, str(font_path)))
+            REGISTERED_TEMPLATE_FONTS[cache_key] = reportlab_name
+            return reportlab_name
+        except Exception:
+            pass
+
+    fallback = "Helvetica-Bold" if variant in {"bold", "bold_italic"} else "Helvetica"
+    REGISTERED_TEMPLATE_FONTS[cache_key] = fallback
+    return fallback
 
 
 def _font_size(cell) -> float:
-    size = float(cell.font.sz or 10.0) if cell.font else 10.0
-    return max(7.0, min(size, 14.0))
+    return float(cell.font.sz) if cell.font and cell.font.sz else 10.0
 
 
 def _wrap_lines(text: str, font_name: str, font_size: float, max_width: float, allow_wrap: bool) -> List[str]:
@@ -184,7 +279,7 @@ def _wrap_lines(text: str, font_name: str, font_size: float, max_width: float, a
     return parts
 
 
-def _draw_text_in_box(c: canvas.Canvas, text: str, box, cell, padding: float = 3.5):
+def _draw_text_in_box(c: canvas.Canvas, text: str, box, cell, padding: float = 3.5, force_wrap: bool = False, shrink_to_fit: bool = True):
     if text in (None, ""):
         return
 
@@ -195,19 +290,21 @@ def _draw_text_in_box(c: canvas.Canvas, text: str, box, cell, padding: float = 3
     vertical = (cell.alignment.vertical or "center") if cell.alignment else "center"
     max_width = max(10, right - left - (padding * 2))
     max_height = max(8, top - bottom - (padding * 2))
-    allow_wrap = bool(getattr(cell.alignment, "wrap_text", False)) or ("\n" in str(text))
+    allow_wrap = force_wrap or bool(getattr(cell.alignment, "wrap_text", False)) or ("\n" in str(text))
 
     lines: List[str] = []
     line_height = 0.0
     total_height = 0.0
-    while font_size >= 6.0:
+    while True:
         lines = _wrap_lines(str(text), font_name, font_size, max_width, allow_wrap)
         widest = max((stringWidth(line, font_name, font_size) for line in lines), default=0)
         line_height = font_size * 1.15
         total_height = line_height * len(lines)
-        if widest <= max_width and total_height <= max_height:
+        if not shrink_to_fit or (widest <= max_width and total_height <= max_height):
             break
         font_size -= 0.4
+        if font_size < 6.0:
+            break
 
     if vertical == "top":
         y = top - padding - font_size
@@ -301,6 +398,31 @@ def _amount_to_words(value: float) -> str:
         return ""
 
 
+def _exchange_details_line(invoice: Dict[str, Any]) -> str:
+    payment_mode = str(invoice.get("payment_mode") or "").strip().lower()
+    exchange_description = str(invoice.get("exchange_description") or "").strip()
+    exchange_weight = invoice.get("exchange_weight")
+    exchange_amount = invoice.get("exchange_amount")
+    has_exchange_details = payment_mode == "exchange" or any(
+        value not in (None, "", 0, 0.0) for value in (exchange_description, exchange_weight, exchange_amount)
+    )
+    if not has_exchange_details:
+        return ""
+    return f"Exchange: {exchange_description} (Wt: {_weight(exchange_weight)}, Amt: {_money(exchange_amount)})"
+
+
+def _payment_display_lines(invoice: Dict[str, Any], cash_amount: Any, bank_amount: Any) -> List[Tuple[str, Any]]:
+    payment_mode = str(invoice.get("payment_mode") or "cash").strip().lower()
+    balance_payment_mode = str(invoice.get("balance_payment_mode") or "").strip().lower()
+    display_mode = balance_payment_mode if payment_mode == "exchange" and balance_payment_mode else payment_mode
+
+    if display_mode == "bank":
+        return [("Bank:", bank_amount)]
+    if display_mode == "cash_bank":
+        return [("Cash:", cash_amount), ("Bank:", bank_amount)]
+    return [("Cash:", cash_amount)]
+
+
 def _shop_value(shop_overrides: Dict[str, str] | None, invoice: Dict[str, Any], key: str, default: str = "") -> str:
     if shop_overrides and shop_overrides.get(key):
         return str(shop_overrides.get(key) or "").strip()
@@ -352,16 +474,16 @@ def _dynamic_cell_values(
         dynamic[f"A{idx}"] = str(idx - 10)
         dynamic[f"B{idx}"] = str(item.get("particulars") or "")
         dynamic[f"C{idx}"] = _qty(item.get("quantity"))
-        dynamic[f"D{idx}"] = _qty(item.get("gross_weight"))
-        dynamic[f"E{idx}"] = _qty(item.get("stone_weight"))
-        dynamic[f"F{idx}"] = _qty(item.get("qty_gms"))
-        dynamic[f"G{idx}"] = _qty(item.get("value_addition"))
+        dynamic[f"D{idx}"] = _weight(item.get("gross_weight"))
+        dynamic[f"E{idx}"] = _weight(item.get("stone_weight"))
+        dynamic[f"F{idx}"] = _weight(item.get("qty_gms"))
+        dynamic[f"G{idx}"] = _weight(item.get("value_addition"))
         dynamic[f"H{idx}"] = _rate(item.get("rate_per_g"))
         dynamic[f"I{idx}"] = _money(item.get("stone_amount", 0))
         dynamic[f"J{idx}"] = _money(item.get("invoice_amount", item.get("amount", 0)))
 
     payment_mode = str(invoice.get("payment_mode") or "cash").strip().lower()
-    if payment_mode == "cash_bank":
+    if payment_mode in {"cash_bank", "exchange"}:
         cash_amount = invoice.get("cash_amount", 0)
         bank_amount = invoice.get("bank_amount", 0)
     elif payment_mode == "bank":
@@ -379,8 +501,14 @@ def _dynamic_cell_values(
         dynamic["J30"] = _money(invoice.get("igst", 0))
         dynamic["J31"] = _money(invoice.get("final_amount", 0))
         dynamic["C32"] = _amount_to_words(invoice.get("final_amount", 0))
-        dynamic["C35"] = _money_or_blank(cash_amount)
-        dynamic["C36"] = _money_or_blank(bank_amount)
+        exchange_details_line = _exchange_details_line(invoice)
+        if exchange_details_line:
+            dynamic["B33"] = exchange_details_line
+        payment_lines = _payment_display_lines(invoice, cash_amount, bank_amount)
+        dynamic["B35"] = payment_lines[0][0] if len(payment_lines) > 0 else ""
+        dynamic["C35"] = _money(payment_lines[0][1]) if len(payment_lines) > 0 else ""
+        dynamic["B36"] = payment_lines[1][0] if len(payment_lines) > 1 else ""
+        dynamic["C36"] = _money(payment_lines[1][1]) if len(payment_lines) > 1 else ""
         dynamic["F34"] = f"For {_shop_value(shop_overrides, invoice, 'shop_name', SHOP_NAME) or SHOP_NAME}"
     else:
         dynamic["C32"] = "Continued on next page..."
@@ -546,7 +674,14 @@ def _render_page(
 
             box = _box_for(row, col, row_edges, col_edges, merge)
             text = dynamic.get(coord, cell.value)
-            _draw_text_in_box(c, text, box, cell)
+            _draw_text_in_box(
+                c,
+                text,
+                box,
+                cell,
+                force_wrap=coord == "B33" and coord in dynamic,
+                shrink_to_fit=not (coord == "B33" and coord in dynamic),
+            )
 
     _draw_header_images(c, ws, row_edges, col_edges, invoice, shop_overrides=shop_overrides)
 

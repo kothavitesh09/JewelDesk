@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 import pandas as pd
 
 from db import bills_collection, require_db
-from utils import format_invoice_no
+from utils import format_invoice_no, format_weight
 
 
 EXCEL_HEADERS = [
@@ -124,7 +124,7 @@ def _build_row(
         "Customer Name": customer_name,
         "Item Name": item.get("particulars") or "",
         "UOM (GMS)": "GMS" if item.get("qty_gms") is not None else "",
-        "Qty": item.get("qty_gms") if item.get("qty_gms") is not None else "",
+        "Qty": format_weight(item.get("qty_gms")) if item.get("qty_gms") is not None else "",
         "Rate": item.get("rate_per_g") if item.get("rate_per_g") is not None else "",
         "Taxable": taxable_amount,
         "CGST Amount": cgst_amount,
@@ -132,8 +132,8 @@ def _build_row(
         "IGST Amount": igst_amount,
         "Total Amount": total_amount,
         "Mode of Payment": "Cash + Bank" if payment_mode == "cash_bank" else (payment_mode.title() if payment_mode else ""),
-        "Amt in Cash": cash_amount if payment_mode == "cash_bank" else "",
-        "Amt in Bank": bank_amount if payment_mode == "cash_bank" else "",
+        "Amt in Cash": cash_amount if payment_mode in {"cash_bank", "exchange"} else "",
+        "Amt in Bank": bank_amount if payment_mode in {"cash_bank", "exchange"} else "",
         "Discount": discount,
     }
 

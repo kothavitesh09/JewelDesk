@@ -355,6 +355,10 @@ def _serialize_bill(doc, include_items: bool = False):
         "payment_mode": doc.get("payment_mode", "cash"),
         "cash_amount": round(float(doc.get("cash_amount", 0) or 0), 2),
         "bank_amount": round(float(doc.get("bank_amount", 0) or 0), 2),
+        "exchange_description": doc.get("exchange_description"),
+        "exchange_weight": round(float(doc.get("exchange_weight", 0) or 0), 3),
+        "exchange_amount": round(float(doc.get("exchange_amount", 0) or 0), 2),
+        "balance_payment_mode": doc.get("balance_payment_mode"),
         "tax_type": doc.get("tax_type", "cgst_sgst"),
         "total": doc.get("total", 0),
         "discount": round(float(doc.get("discount", 0) or 0), 2),
@@ -471,8 +475,8 @@ def _normalize_invoice_payload(data):
     customer_phone = _clean_text(data.get("customer_phone", ""), 30) or None
     party_gst_no = _clean_text(data.get("party_gst_no", ""), 30) or None
     payment_mode = str(data.get("payment_mode", "cash")).strip().lower()
-    if payment_mode not in {"cash", "bank", "cash_bank"}:
-        raise ValueError("payment_mode must be 'cash', 'bank', or 'cash_bank'.")
+    if payment_mode not in {"cash", "bank", "cash_bank", "exchange"}:
+        raise ValueError("payment_mode must be 'cash', 'bank', 'cash_bank', or 'exchange'.")
 
     tax_type = str(data.get("tax_type", "cgst_sgst")).strip().lower()
     if tax_type not in {"cgst_sgst", "igst"}:
@@ -579,7 +583,43 @@ def _normalize_invoice_payload(data):
         igst = 0.0
     final_amount = round(taxable_total + cgst + sgst + igst, 2)
 
-    if payment_mode == "cash_bank":
+    exchange_description = None
+    exchange_weight = 0.0
+    exchange_amount = 0.0
+    balance_payment_mode = None
+
+    if payment_mode == "exchange":
+        exchange_description = _clean_text(data.get("exchange_description", ""), 300) or None
+        exchange_weight = safe_float(data.get("exchange_weight"), 0.0)
+        exchange_amount = safe_float(data.get("exchange_amount"), None)
+        balance_payment_mode = str(data.get("balance_payment_mode", "cash")).strip().lower()
+
+        if exchange_weight is None or exchange_weight < 0:
+            raise ValueError("exchange_weight must be 0 or greater.")
+        if exchange_amount is None or exchange_amount < 0:
+            raise ValueError("exchange_amount must be 0 or greater.")
+        if exchange_amount > final_amount:
+            raise ValueError("exchange_amount cannot be greater than the final invoice amount.")
+        if balance_payment_mode not in {"cash", "bank", "cash_bank"}:
+            raise ValueError("balance_payment_mode must be 'cash', 'bank', or 'cash_bank'.")
+
+        balance_amount = round(final_amount - exchange_amount, 2)
+        if balance_payment_mode == "cash_bank":
+            cash_amount = safe_float(data.get("cash_amount"), None)
+            bank_amount = safe_float(data.get("bank_amount"), None)
+            if cash_amount is None or cash_amount <= 0:
+                raise ValueError("cash_amount must be greater than 0 for Exchange cash_bank balance payment mode.")
+            if bank_amount is None or bank_amount <= 0:
+                raise ValueError("bank_amount must be greater than 0 for Exchange cash_bank balance payment mode.")
+            if round(cash_amount + bank_amount, 2) != balance_amount:
+                raise ValueError("cash_amount + bank_amount must equal the Exchange balance amount.")
+        elif balance_payment_mode == "bank":
+            cash_amount = 0.0
+            bank_amount = balance_amount
+        else:
+            cash_amount = balance_amount
+            bank_amount = 0.0
+    elif payment_mode == "cash_bank":
         cash_amount = safe_float(data.get("cash_amount"), None)
         bank_amount = safe_float(data.get("bank_amount"), None)
         if cash_amount is None or cash_amount <= 0:
@@ -604,6 +644,10 @@ def _normalize_invoice_payload(data):
         "payment_mode": payment_mode,
         "cash_amount": round(cash_amount, 2),
         "bank_amount": round(bank_amount, 2),
+        "exchange_description": exchange_description,
+        "exchange_weight": round(exchange_weight, 3),
+        "exchange_amount": round(exchange_amount, 2),
+        "balance_payment_mode": balance_payment_mode,
         "tax_type": tax_type,
         "items": normalized_items,
         "total": total,
@@ -1380,7 +1424,7 @@ def dashboard_data():
         items = bill.get("items", []) or []
         item_count = len(items) or 1
         payment_mode = str(bill.get("payment_mode", "cash")).lower()
-        if payment_mode == "cash_bank":
+        if payment_mode in {"cash_bank", "exchange"}:
             payment["cash"] += float(bill.get("cash_amount", 0) or 0)
             payment["bank"] += float(bill.get("bank_amount", 0) or 0)
         else:

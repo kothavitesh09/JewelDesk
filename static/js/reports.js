@@ -10,6 +10,10 @@ const currency = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 2,
 });
 const numberFormat = new Intl.NumberFormat("en-IN", {
+  minimumFractionDigits: 3,
+  maximumFractionDigits: 3,
+});
+const quantityFormat = new Intl.NumberFormat("en-IN", {
   minimumFractionDigits: 0,
   maximumFractionDigits: 3,
 });
@@ -29,6 +33,10 @@ function formatCurrency(value) {
 
 function formatWeight(value) {
   return numberFormat.format(Number(value || 0));
+}
+
+function formatQuantity(value) {
+  return quantityFormat.format(Number(value || 0));
 }
 
 function escapeHtml(value) {
@@ -438,7 +446,7 @@ function renderTopCategories() {
   const totalRevenue = categories.reduce((sum, row) => sum + row.revenue, 0);
   const totalQty = categories.reduce((sum, row) => sum + row.qty, 0);
   setText("categoryTotalRevenue", formatCurrency(totalRevenue));
-  setText("categoryTotalQty", `${formatWeight(totalQty)} sold`);
+  setText("categoryTotalQty", `${formatQuantity(totalQty)} sold`);
   empty.style.display = totalRevenue ? "none" : "block";
 
   list.innerHTML = categories.map((row, index) => {
@@ -452,7 +460,7 @@ function renderTopCategories() {
         </div>
         <div class="category-row__metrics">
           <strong>${percent.toFixed(0)}%</strong>
-          <span>${formatWeight(row.qty)} sold</span>
+          <span>${formatQuantity(row.qty)} sold</span>
         </div>
       </article>
     `;
@@ -490,7 +498,7 @@ function renderDonut(categories, totalRevenue) {
     const path = describeArc(130, 130, 82, angle, angle + slice);
     angle += slice;
     return `<path class="donut-slice" d="${path}" fill="none" stroke="${getDonutColor(index)}" stroke-width="30" stroke-linecap="round"
-      data-label="${escapeHtml(row.name)}" data-revenue="${escapeHtml(formatCurrency(row.revenue))}" data-qty="${escapeHtml(formatWeight(row.qty))} sold"></path>`;
+      data-label="${escapeHtml(row.name)}" data-revenue="${escapeHtml(formatCurrency(row.revenue))}" data-qty="${escapeHtml(formatQuantity(row.qty))} sold"></path>`;
   }).join("");
   chart.querySelectorAll(".donut-slice").forEach((slice) => {
     const show = () => positionTooltip(tooltip, "50%", "15%", `<strong>${slice.dataset.label}</strong><span>${slice.dataset.revenue}</span><span>${slice.dataset.qty}</span>`);

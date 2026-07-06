@@ -29,6 +29,13 @@ def safe_float(v, default=None):
         return default
 
 
+def format_weight(value) -> str:
+    try:
+        return f"{float(value):,.3f}"
+    except Exception:
+        return ""
+
+
 def parse_hsn(value: str) -> str:
     # Keep as string; allow user input like "12" or "0123"
     if value is None:
@@ -158,4 +165,3 @@ def rupees_in_words(amount: float) -> str:
 def format_invoice_no(seq: int) -> str:
     # Common counter style; easy to print/read.
     return f"{seq:06d}"
-

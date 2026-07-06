@@ -10,6 +10,19 @@ function money3(n) {
   return x.toFixed(3);
 }
 
+function weightInputValue(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const x = Number(value);
+  return isFinite(x) ? money3(x) : "";
+}
+
+function formatWeightInput(input) {
+  const x = Number(input?.value);
+  if (input && input.value !== "" && isFinite(x)) {
+    input.value = money3(x);
+  }
+}
+
 function toast(message, type = "success") {
   window.JewelDeskUI?.toast?.(message, type);
 }
@@ -80,7 +93,7 @@ function renderPurchaseRows(rows) {
           </div>
           <div class="purchase-item-row__cell">
             <label class="purchase-mini-label">Weight (grams)</label>
-            <input type="number" min="0" step="0.001" class="form-control premium-input purchase-item-weight" value="${row.weight || ""}" />
+            <input type="number" min="0" step="0.001" class="form-control premium-input purchase-item-weight" value="${weightInputValue(row.weight)}" />
           </div>
           <div class="purchase-item-row__cell">
             <label class="purchase-mini-label">Rate</label>
@@ -150,6 +163,7 @@ function bindPurchaseRowEvents() {
       field.addEventListener("input", syncPurchaseTotal);
       field.addEventListener("change", syncPurchaseTotal);
     });
+    row.querySelector(".purchase-item-weight")?.addEventListener("blur", (event) => formatWeightInput(event.target));
 
     if (removeButton) {
       removeButton.addEventListener("click", () => removePurchaseRow(rowIndex));
